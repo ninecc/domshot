@@ -7,6 +7,7 @@ const pixelHint = document.querySelector<HTMLElement>('#pixelHint')!;
 const selectButton = document.querySelector<HTMLButtonElement>('#selectElement')!;
 const pageButton = document.querySelector<HTMLButtonElement>('#capturePage')!;
 const embedFonts = document.querySelector<HTMLInputElement>('#embedFonts')!;
+const reconcile = document.querySelector<HTMLInputElement>('#reconcile')!;
 const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButton')!;
 const advancedSettings = document.querySelector<HTMLElement>('#advancedSettings')!;
 
@@ -19,6 +20,7 @@ function readSettings(): CaptureSettings {
     format: chosen<CaptureSettings['format']>('format'),
     scale: Number(chosen('scale')) as CaptureSettings['scale'],
     embedFonts: embedFonts.checked,
+    reconcile: reconcile.checked,
   };
 }
 
@@ -28,6 +30,7 @@ function applySettings(settings: CaptureSettings) {
   if (format) format.checked = true;
   if (scale) scale.checked = true;
   embedFonts.checked = settings.embedFonts;
+  reconcile.checked = settings.reconcile;
   pixelHint.textContent = `${settings.scale}× 清晰度`;
 }
 

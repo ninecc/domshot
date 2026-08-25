@@ -4,6 +4,7 @@ export interface CaptureSettings {
   format: CaptureFormat;
   scale: 1 | 2 | 3;
   embedFonts: boolean;
+  reconcile: boolean;
 }
 
 export const CONTENT_SCRIPT_PROTOCOL = 3;
@@ -18,4 +19,5 @@ export const DEFAULT_SETTINGS: CaptureSettings = {
   format: 'png',
   scale: 2,
   embedFonts: true,
+  reconcile: false,
 };

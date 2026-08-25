@@ -163,6 +163,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       scale: settings.scale,
       dpr: 1,
       embedFonts: settings.embedFonts,
+      reconcile: settings.reconcile,
       exclude: [`#${ROOT_ID}`, '[data-domshot-ui]'],
       backgroundColor: settings.format === 'png' ? undefined : '#ffffff',
     });

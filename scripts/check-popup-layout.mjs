@@ -41,6 +41,9 @@ try {
       scrollHeight: document.documentElement.scrollHeight,
       viewportWidth: document.documentElement.clientWidth,
       viewportHeight: document.documentElement.clientHeight,
+      advancedOptionCount: document.querySelectorAll('.advanced-options .toggle-row').length,
+      embedFontsChecked: document.querySelector('#embedFonts').checked,
+      reconcileChecked: document.querySelector('#reconcile').checked,
       stableRegions: Object.fromEntries(
         ['.masthead', '.intro', '.actions', '.output-settings'].map((selector) => {
           const rect = document.querySelector(selector).getBoundingClientRect();
@@ -52,6 +55,9 @@ try {
   cdp.close();
 
   assert.equal(metrics.advancedHidden, false, 'advanced settings did not open');
+  assert.equal(metrics.advancedOptionCount, 2, 'advanced settings must expose both quality options');
+  assert.equal(metrics.embedFontsChecked, true, 'font embedding must remain enabled by default');
+  assert.equal(metrics.reconcileChecked, false, 'layout reconciliation must be opt-in');
   assert.ok(metrics.scrollWidth <= 360, `expanded popup is ${metrics.scrollWidth}px wide`);
   assert.ok(metrics.scrollHeight <= 600, `expanded popup is ${metrics.scrollHeight}px tall and requires a scrollbar`);
   assert.deepEqual(metrics.stableRegions, stableBefore, 'opening advanced settings moved or resized existing content');

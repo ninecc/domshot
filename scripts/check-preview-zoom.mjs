@@ -38,7 +38,7 @@ try {
     for (const pinchZoom of [1, 1.5, 2]) {
       await page.send('Emulation.setPageScaleFactor', { pageScaleFactor: pinchZoom });
       await page.evaluate(`globalThis.__domshotListener({
-        type: 'DOMSHOT_FULL_PAGE', settings: { format: 'png', scale: 1, embedFonts: false }, pageZoom: ${pageZoom}
+        type: 'DOMSHOT_FULL_PAGE', settings: { format: 'png', scale: 1, embedFonts: false, reconcile: false }, pageZoom: ${pageZoom}
       }, {}, () => {})`);
       await waitForPreview(page);
       results.push(await page.evaluate(`(() => {
@@ -73,7 +73,7 @@ try {
 
   await page.send('Emulation.setPageScaleFactor', { pageScaleFactor: 1 });
   await page.evaluate(`globalThis.__domshotListener({
-    type: 'DOMSHOT_FULL_PAGE', settings: { format: 'png', scale: 1, embedFonts: false }, pageZoom: 1.25
+    type: 'DOMSHOT_FULL_PAGE', settings: { format: 'png', scale: 1, embedFonts: false, reconcile: false }, pageZoom: 1.25
   }, {}, () => {})`);
   await waitForPreview(page);
   await page.evaluate(`globalThis.__domshotListener({ type: 'DOMSHOT_ZOOM_CHANGED', pageZoom: 0.33 }, {}, () => {})`);

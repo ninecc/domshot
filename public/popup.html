@@ -33,7 +33,10 @@
 
       <section class="advanced-settings" id="advancedSettings" aria-labelledby="advanced-title" hidden>
         <div class="advanced-heading"><div><h2 id="advanced-title">高级设置</h2><p>低频选项会自动保存</p></div><span>ADVANCED</span></div>
-        <label class="toggle-row"><span><strong>嵌入网页字体</strong><small>提升自定义字体的还原度，但处理时间更长</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
+        <div class="advanced-options">
+          <label class="toggle-row"><span><strong>嵌入网页字体</strong><small>提升自定义字体还原度，处理时间更长</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
+          <label class="toggle-row"><span><strong>精确布局校准</strong><small>减少换行和布局偏差，处理时间约翻倍</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
+        </div>
       </section>
 
       <p class="status" id="status" role="status"><span aria-hidden="true">●</span> 准备就绪 · 图片仅在本地处理</p>
