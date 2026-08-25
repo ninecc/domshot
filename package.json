@@ -1,6 +1,7 @@
 {
-  "name": "snapdom-extension",
+  "name": "domshot",
   "version": "0.1.0",
+  "description": "DOMShot browser extension — capture DOM elements as images, powered by SnapDOM.",
   "private": true,
   "type": "module",
   "scripts": {

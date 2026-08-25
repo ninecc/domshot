@@ -41,17 +41,17 @@ async function getActiveTab(): Promise<chrome.tabs.Tab> {
 
 async function ensureContentScript(tabId: number) {
   try {
-    await chrome.tabs.sendMessage(tabId, { type: 'SNAPDOM_PING' } satisfies ExtensionMessage);
+    await chrome.tabs.sendMessage(tabId, { type: 'DOMSHOT_PING' } satisfies ExtensionMessage);
   } catch {
     await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
   }
 }
 
-async function begin(type: 'SNAPDOM_SELECT' | 'SNAPDOM_FULL_PAGE') {
-  const button = type === 'SNAPDOM_SELECT' ? selectButton : pageButton;
+async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_FULL_PAGE') {
+  const button = type === 'DOMSHOT_SELECT' ? selectButton : pageButton;
   const settings = readSettings();
   button.disabled = true;
-  status.textContent = type === 'SNAPDOM_SELECT' ? '正在打开取景器…' : '正在准备整个页面…';
+  status.textContent = type === 'DOMSHOT_SELECT' ? '正在打开取景器…' : '正在准备整个页面…';
 
   try {
     await chrome.storage.sync.set({ captureSettings: settings });
@@ -74,8 +74,8 @@ document.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
   });
 });
 
-selectButton.addEventListener('click', () => void begin('SNAPDOM_SELECT'));
-pageButton.addEventListener('click', () => void begin('SNAPDOM_FULL_PAGE'));
+selectButton.addEventListener('click', () => void begin('DOMSHOT_SELECT'));
+pageButton.addEventListener('click', () => void begin('DOMSHOT_FULL_PAGE'));
 settingsButton.addEventListener('click', () => {
   const opening = advancedSettings.hidden;
   advancedSettings.hidden = !opening;

@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "SnapDOM 取景器",
-  "description": "选择网页中的任意元素，高保真复制或导出为图片。",
+  "name": "DOMShot",
+  "description": "选择网页元素并高保真导出图片。Powered by SnapDOM。",
   "version": "0.1.0",
   "action": {
-    "default_title": "SnapDOM 取景器",
+    "default_title": "DOMShot",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icon16.png",

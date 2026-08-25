@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SnapDOM</title>
+    <title>DOMShot</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main class="shell">
       <header class="masthead">
-        <a class="brand" href="https://snapdom.dev" target="_blank" rel="noreferrer" aria-label="访问 SnapDOM 官网">
+        <div class="brand" aria-label="DOMShot">
           <img class="brand-mark" src="icon128.png" alt="" aria-hidden="true" />
-          <span class="wordmark">Snap<span>DOM</span></span>
-        </a>
+          <span class="wordmark">DOM<span>Shot</span></span>
+        </div>
         <button class="settings-button" id="settingsButton" type="button" aria-label="打开高级设置" aria-controls="advancedSettings" aria-expanded="false">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
         </button>
@@ -37,6 +37,11 @@
       </section>
 
       <p class="status" id="status" role="status"><span aria-hidden="true">●</span> 准备就绪 · 图片仅在本地处理</p>
+      <footer class="attribution">
+        Powered by <a href="https://snapdom.dev" target="_blank" rel="noreferrer noopener">SnapDOM</a>
+        <span aria-hidden="true">·</span>
+        <a href="third-party-licenses.txt" target="_blank">第三方许可</a>
+      </footer>
     </main>
     <script src="popup.js"></script>
   </body>

@@ -3,27 +3,27 @@ import type { CaptureFormat, CaptureSettings, ExtensionMessage } from './types';
 
 declare global {
   interface Window {
-    __snapdomViewfinderLoaded?: boolean;
+    __domShotLoaded?: boolean;
   }
 }
 
-if (!window.__snapdomViewfinderLoaded) {
-  window.__snapdomViewfinderLoaded = true;
+if (!window.__domShotLoaded) {
+  window.__domShotLoaded = true;
   installMessageListener();
 }
 
-const ROOT_ID = 'snapdom-extension-root';
+const ROOT_ID = 'domshot-extension-root';
 const UI_FONT = 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif';
 let currentSession: ViewfinderSession | null = null;
 
 function installMessageListener() {
   chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
-    if (message.type === 'SNAPDOM_PING') {
+    if (message.type === 'DOMSHOT_PING') {
       sendResponse({ ready: true });
       return;
     }
 
-    if (message.type === 'SNAPDOM_SELECT') {
+    if (message.type === 'DOMSHOT_SELECT') {
       currentSession?.destroy();
       currentSession = new ViewfinderSession(message.settings);
       currentSession.start();
@@ -31,7 +31,7 @@ function installMessageListener() {
       return;
     }
 
-    if (message.type === 'SNAPDOM_FULL_PAGE') {
+    if (message.type === 'DOMSHOT_FULL_PAGE') {
       currentSession?.destroy();
       currentSession = null;
       void captureElement(document.documentElement, message.settings, '完整页面');
@@ -51,7 +51,7 @@ class ViewfinderSession {
 
   constructor(private settings: CaptureSettings) {
     this.host.id = ROOT_ID;
-    this.host.dataset.snapdomUi = 'selector';
+    this.host.dataset.domshotUi = 'selector';
     this.shadow = this.host.attachShadow({ mode: 'open' });
     this.shadow.innerHTML = selectorMarkup();
     this.outline = this.shadow.querySelector<HTMLElement>('.outline')!;
@@ -143,7 +143,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       scale: settings.scale,
       dpr: 1,
       embedFonts: settings.embedFonts,
-      exclude: [`#${ROOT_ID}`, '[data-snapdom-ui]'],
+      exclude: [`#${ROOT_ID}`, '[data-domshot-ui]'],
       backgroundColor: settings.format === 'png' ? undefined : '#ffffff',
     });
 
@@ -219,7 +219,7 @@ function showPreview({ image, blob, format, label, scale }: {
   shadow.querySelector('.download')!.addEventListener('click', () => {
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `snapdom-${safeFilename(label)}-${timestamp()}.${extension}`;
+    anchor.download = `domshot-${safeFilename(label)}-${timestamp()}.${extension}`;
     anchor.click();
     feedback(shadow, '已开始下载');
   });
@@ -275,7 +275,7 @@ function showToast(message: string) {
 function createHost(kind: string): HTMLDivElement {
   const host = document.createElement('div');
   host.id = ROOT_ID;
-  host.dataset.snapdomUi = kind;
+  host.dataset.domshotUi = kind;
   host.attachShadow({ mode: 'open' });
   return host;
 }
