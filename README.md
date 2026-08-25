@@ -1,38 +1,73 @@
 # DOMShot
 
-DOMShot 是一个独立开发的 Chrome Manifest V3 扩展，用于选择网页元素或捕获完整页面，并导出 PNG、JPG 或 WebP 图片。
+English · [简体中文](./README_CN.md)
 
-**Powered by [SnapDOM](https://snapdom.dev/)**：DOMShot 使用 [`@zumer/snapdom`](https://www.npmjs.com/package/@zumer/snapdom) 作为 DOM 渲染与图片生成引擎。DOMShot 并非 ZumerLab 或 SnapDOM 官方产品，也不代表其认可或背书。
+DOMShot is a Chrome Manifest V3 extension for capturing individual DOM elements or complete pages as PNG, JPG, and WebP images.
 
-## 功能
+**Powered by [SnapDOM](https://snapdom.dev/).** DOMShot uses [`@zumer/snapdom`](https://www.npmjs.com/package/@zumer/snapdom) as its DOM rendering and image generation engine. DOMShot is an independent project and is not an official ZumerLab or SnapDOM product, nor is it endorsed by them.
 
-- 悬停高亮并显示元素名称、尺寸，单击后截图
-- 截取整个页面 DOM，而不局限于可见视口
-- 1× / 2× / 3× 输出，支持嵌入网页字体
-- 页面内预览、复制到剪贴板、下载图片
-- `Esc` 退出选择，所有图片只在本地浏览器中处理
-- 仅使用 `activeTab` 临时权限，不申请读取全部网站
+## Features
 
-## 本地运行
+- Highlight and inspect elements before capturing them.
+- Capture one element or the complete page DOM.
+- Export PNG, JPG, or WebP at 1×, 2×, or 3× scale.
+- Preview, copy, and download images without leaving the page.
+- Keep extension UI stable across browser page zoom and pinch zoom.
+- Process images locally in the browser without uploading them.
+
+## Install from source
+
+Requirements: Node.js 20.11+ and Google Chrome 120+.
 
 ```bash
 npm install
-npm run check
 npm run build
 ```
 
-打开 `chrome://extensions`，启用“开发者模式”，选择“加载已解压的扩展程序”，然后选择本项目生成的 `dist` 目录。
+Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the generated `dist` directory.
 
-开发时运行 `npm run dev`。修改源码后，在扩展管理页点击刷新；构建脚本会持续更新 `dist` 中的 JS。
+Open DOMShot on a regular web page, choose **Capture element** or **Capture full page**, then copy or download the result from the in-page preview. Press `Esc` to leave element selection.
 
-## 已知限制
+## Settings
 
-- Chrome、Edge 等浏览器自己的页面（例如 `chrome://extensions`）不允许扩展注入脚本。
-- 缺少 CORS 响应头的跨域图片或字体可能无法嵌入；这是 Canvas 的浏览器安全限制。
-- 特别大的完整页面会占用较多内存，建议先选择页面中的主要内容容器。
+| Setting | Default | Description |
+| --- | --- | --- |
+| Format | PNG | PNG preserves transparency; JPG and WebP use a white background. |
+| Scale | 2× | Multiplies the exported pixel dimensions by 1×, 2×, or 3×. |
+| Embed web fonts | On | Improves custom font fidelity, with additional processing time. |
+| Reconcile layout | Off | Improves text wrapping in inline and table-cell elements, but can roughly double capture time. |
 
-## 第三方软件与许可
+Settings are saved automatically.
 
-SnapDOM 由 ZumerLab 提供，并以 MIT License 发布。其版权声明、许可条款与免责声明完整收录在 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)，构建时也会复制到发布目录中。
+## Privacy and permissions
 
-SnapDOM 的软件许可不等同于 DOMShot 自身的项目许可；除第三方组件各自授予的权利外，DOMShot 暂未声明独立的开源许可证。
+DOMShot does not request persistent access to every website and contains no telemetry or image-upload service.
+
+- `activeTab`: access the current tab after a user action.
+- `scripting`: inject the capture script when requested.
+- `storage`: remember capture settings.
+- `clipboardWrite`: copy generated images.
+
+## Development and tests
+
+```bash
+npm run dev       # rebuild on source changes
+npm run typecheck # check TypeScript
+npm test          # build and run browser behaviour tests
+npm run check     # typecheck and test
+```
+
+Browser tests use `puppeteer-core` with the locally installed Chrome. Set `DOMSHOT_CHROME_PATH` to use another Chrome or Chromium executable. See [test/README.md](./test/README.md) for details.
+
+## Limitations
+
+- Protected pages such as `chrome://` pages and extension stores do not allow script injection.
+- Cross-origin images and fonts without suitable CORS headers may not be embedded.
+- Very large pages are limited by browser memory and maximum Canvas dimensions.
+- Video, Canvas, WebGL, animations, and highly dynamic content may differ from the visible page.
+
+## License
+
+DOMShot is released under the [MIT License](./LICENSE), which is also included in every build.
+
+SnapDOM is provided by ZumerLab under the MIT License. Its copyright notice and license are included in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md) and copied into every build.
