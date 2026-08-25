@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "SnapDOM 取景器",
+  "description": "选择网页中的任意元素，高保真复制或导出为图片。",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "SnapDOM 取景器",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png"
+    }
+  },
+  "permissions": ["activeTab", "scripting", "storage", "clipboardWrite"],
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

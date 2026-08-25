@@ -1,0 +1,37 @@
+import { build, context } from 'esbuild';
+import { cp, mkdir, rm } from 'node:fs/promises';
+import { resolve } from 'node:path';
+
+const root = resolve(import.meta.dirname, '..');
+const outdir = resolve(root, 'dist');
+const watch = process.argv.includes('--watch');
+
+await rm(outdir, { recursive: true, force: true });
+await mkdir(outdir, { recursive: true });
+await Promise.all([
+  cp(resolve(root, 'public/manifest.json'), resolve(outdir, 'manifest.json')),
+  cp(resolve(root, 'public/popup.html'), resolve(outdir, 'popup.html')),
+  ...[16, 32, 48, 128].map((size) => cp(resolve(root, `public/icon${size}.png`), resolve(outdir, `icon${size}.png`))),
+]);
+
+const config = {
+  entryPoints: {
+    popup: resolve(root, 'src/popup.ts'),
+    content: resolve(root, 'src/content.ts'),
+  },
+  bundle: true,
+  outdir,
+  format: 'iife',
+  target: 'chrome120',
+  sourcemap: true,
+  minify: !watch,
+};
+
+if (watch) {
+  const ctx = await context(config);
+  await ctx.watch();
+  console.log('Watching extension sources…');
+} else {
+  await build(config);
+  console.log('Built unpacked extension in dist/');
+}

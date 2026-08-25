@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SnapDOM</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="masthead">
+        <a class="brand" href="https://snapdom.dev" target="_blank" rel="noreferrer" aria-label="访问 SnapDOM 官网">
+          <img class="brand-mark" src="icon128.png" alt="" aria-hidden="true" />
+          <span class="wordmark">Snap<span>DOM</span></span>
+        </a>
+        <button class="settings-button" id="settingsButton" type="button" aria-label="打开高级设置" aria-controls="advancedSettings" aria-expanded="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+        </button>
+      </header>
+
+      <section class="intro" aria-labelledby="intro-title"><p>CAPTURE · INSPECT · EXTRACT</p><h1 id="intro-title">精确捕获网页元素</h1><span>保留样式、字体和清晰细节</span></section>
+
+      <section class="actions" aria-label="截图操作">
+        <button class="capture-action primary-action" id="selectElement" type="button"><span class="action-symbol frame-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong>提取页面元素</strong><small>悬停定位，单击完成捕获</small></span><span class="chevron" aria-hidden="true">›</span></button>
+        <button class="capture-action secondary-action" id="capturePage" type="button"><span class="action-symbol page-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong>捕获完整页面</strong><small>导出当前页面的全部内容</small></span><span class="chevron" aria-hidden="true">›</span></button>
+      </section>
+
+      <section class="output-settings" aria-labelledby="output-title">
+        <div class="section-heading"><h2 id="output-title">输出设置</h2><span id="pixelHint">2× 清晰度</span></div>
+        <div class="setting-row"><span>图片格式</span><div class="segment" role="radiogroup" aria-label="图片格式"><label><input type="radio" name="format" value="png" checked /><span>PNG</span></label><label><input type="radio" name="format" value="jpg" /><span>JPG</span></label><label><input type="radio" name="format" value="webp" /><span>WebP</span></label></div></div>
+        <div class="setting-row"><span>输出清晰度</span><div class="segment scale-segment" role="radiogroup" aria-label="输出清晰度"><label><input type="radio" name="scale" value="1" /><span>1×</span></label><label><input type="radio" name="scale" value="2" checked /><span>2×</span></label><label><input type="radio" name="scale" value="3" /><span>3×</span></label></div></div>
+      </section>
+
+      <section class="advanced-settings" id="advancedSettings" aria-labelledby="advanced-title" hidden>
+        <div class="advanced-heading"><div><h2 id="advanced-title">高级设置</h2><p>低频选项会自动保存</p></div><span>ADVANCED</span></div>
+        <label class="toggle-row"><span><strong>嵌入网页字体</strong><small>提升自定义字体的还原度，但处理时间更长</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
+      </section>
+
+      <p class="status" id="status" role="status"><span aria-hidden="true">●</span> 准备就绪 · 图片仅在本地处理</p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
