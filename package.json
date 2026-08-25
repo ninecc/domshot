@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "tsc --noEmit && node scripts/check-popup-css.mjs && npm run build && node scripts/check-popup-layout.mjs && node scripts/check-preview-zoom.mjs",
+    "check": "npm run typecheck && npm test",
+    "test": "npm run build && node --test --test-concurrency=1 test/*.test.mjs",
+    "typecheck": "tsc --noEmit",
     "dev": "node scripts/build.mjs --watch"
   },
   "dependencies": {
@@ -15,6 +17,7 @@
   "devDependencies": {
     "@types/chrome": "^0.1.4",
     "esbuild": "^0.25.9",
+    "puppeteer-core": "^25.9.0",
     "typescript": "^5.9.2"
   }
 }
