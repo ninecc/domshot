@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && node scripts/check-popup-css.mjs && npm run build && node scripts/check-popup-layout.mjs",
     "dev": "node scripts/build.mjs --watch"
   },
   "dependencies": {
