@@ -17,6 +17,7 @@ await Promise.all([
 
 const config = {
   entryPoints: {
+    background: resolve(root, 'src/background.ts'),
     popup: resolve(root, 'src/popup.ts'),
     content: resolve(root, 'src/content.ts'),
   },

@@ -1,29 +1,46 @@
 import { snapdom } from '@zumer/snapdom';
 import type { CaptureFormat, CaptureSettings, ExtensionMessage } from './types';
+import { CONTENT_SCRIPT_PROTOCOL } from './types';
 
 declare global {
   interface Window {
     __domShotLoaded?: boolean;
+    __domShotProtocol?: number;
+    __domShotCleanup?: () => void;
   }
 }
 
-if (!window.__domShotLoaded) {
+if (window.__domShotProtocol !== CONTENT_SCRIPT_PROTOCOL) {
+  try {
+    window.__domShotCleanup?.();
+  } catch { /* A listener from a reloaded extension context may already be invalid. */ }
   window.__domShotLoaded = true;
-  installMessageListener();
+  window.__domShotProtocol = CONTENT_SCRIPT_PROTOCOL;
+  window.__domShotCleanup = installMessageListener();
 }
 
 const ROOT_ID = 'domshot-extension-root';
 const UI_FONT = 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif';
+const hostCleanups = new WeakMap<Element, () => void>();
 let currentSession: ViewfinderSession | null = null;
+let currentPageZoom = 1;
+let currentPreviewUpdate: (() => void) | null = null;
 
 function installMessageListener() {
-  chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendResponse) => {
+  const listener = (message: ExtensionMessage, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
     if (message.type === 'DOMSHOT_PING') {
-      sendResponse({ ready: true });
+      sendResponse({ ready: true, protocol: CONTENT_SCRIPT_PROTOCOL });
+      return;
+    }
+
+    if (message.type === 'DOMSHOT_ZOOM_CHANGED') {
+      setPageZoom(message.pageZoom);
+      sendResponse({ updated: true });
       return;
     }
 
     if (message.type === 'DOMSHOT_SELECT') {
+      setPageZoom(message.pageZoom);
       currentSession?.destroy();
       currentSession = new ViewfinderSession(message.settings);
       currentSession.start();
@@ -32,12 +49,15 @@ function installMessageListener() {
     }
 
     if (message.type === 'DOMSHOT_FULL_PAGE') {
+      setPageZoom(message.pageZoom);
       currentSession?.destroy();
       currentSession = null;
       void captureElement(document.documentElement, message.settings, '完整页面');
       sendResponse({ started: true });
     }
-  });
+  };
+  chrome.runtime.onMessage.addListener(listener);
+  return () => chrome.runtime.onMessage.removeListener(listener);
 }
 
 class ViewfinderSession {
@@ -187,6 +207,7 @@ function showPreview({ image, blob, format, label, scale }: {
 }) {
   removeExtensionUi();
   const host = createHost('preview');
+  syncPreviewViewport(host);
   const shadow = host.shadowRoot!;
   const url = URL.createObjectURL(blob);
   const size = formatBytes(blob.size);
@@ -213,7 +234,7 @@ function showPreview({ image, blob, format, label, scale }: {
 
   const cleanup = () => {
     URL.revokeObjectURL(url);
-    host.remove();
+    removeHost(host);
   };
   shadow.querySelector('.close')!.addEventListener('click', cleanup);
   shadow.querySelector('.download')!.addEventListener('click', () => {
@@ -280,8 +301,44 @@ function createHost(kind: string): HTMLDivElement {
   return host;
 }
 
+function syncPreviewViewport(host: HTMLElement) {
+  const viewport = window.visualViewport;
+  const update = () => {
+    const safePageZoom = currentPageZoom;
+    const visualScale = viewport && Number.isFinite(viewport.scale) && viewport.scale > 0 ? viewport.scale : 1;
+    host.style.setProperty('--domshot-ui-scale', String(1 / (safePageZoom * visualScale)));
+    host.dataset.domshotPageZoom = String(safePageZoom);
+    host.dataset.domshotVisualScale = String(visualScale);
+    host.style.setProperty('--domshot-viewport-left', `${viewport?.pageLeft ?? window.scrollX}px`);
+    host.style.setProperty('--domshot-viewport-top', `${viewport?.pageTop ?? window.scrollY}px`);
+    host.style.setProperty('--domshot-viewport-width', `${viewport?.width ?? window.innerWidth}px`);
+    host.style.setProperty('--domshot-viewport-height', `${viewport?.height ?? window.innerHeight}px`);
+  };
+
+  update();
+  currentPreviewUpdate = update;
+  viewport?.addEventListener('resize', update);
+  viewport?.addEventListener('scroll', update);
+  hostCleanups.set(host, () => {
+    viewport?.removeEventListener('resize', update);
+    viewport?.removeEventListener('scroll', update);
+    if (currentPreviewUpdate === update) currentPreviewUpdate = null;
+  });
+}
+
+function setPageZoom(pageZoom: number) {
+  currentPageZoom = Number.isFinite(pageZoom) && pageZoom > 0 ? pageZoom : 1;
+  currentPreviewUpdate?.();
+}
+
+function removeHost(host: Element) {
+  hostCleanups.get(host)?.();
+  hostCleanups.delete(host);
+  host.remove();
+}
+
 function removeExtensionUi() {
-  document.querySelectorAll(`#${ROOT_ID}`).forEach((element) => element.remove());
+  document.querySelectorAll(`#${ROOT_ID}`).forEach(removeHost);
 }
 
 function describeElement(element: Element): string {
@@ -334,7 +391,7 @@ function selectorMarkup() {
 
 function previewStyles() {
   return `
-    :host{display:flex;align-items:flex-end;justify-content:flex-end;padding:18px}.preview-card{width:336px;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.success-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
+    :host{position:absolute;inset:auto;left:var(--domshot-viewport-left,0);top:var(--domshot-viewport-top,0);display:flex;box-sizing:border-box;width:var(--domshot-viewport-width,100vw);height:var(--domshot-viewport-height,100vh);align-items:flex-end;justify-content:flex-end;padding:calc(18px * var(--domshot-ui-scale,1))}.preview-card{width:336px;flex:none;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);transform:scale(var(--domshot-ui-scale,1));transform-origin:right bottom;pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.success-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
 }
 
 function toastStyles() {

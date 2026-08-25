@@ -1,5 +1,5 @@
 import type { CaptureSettings, ExtensionMessage } from './types';
-import { DEFAULT_SETTINGS } from './types';
+import { CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import './popup.css';
 
 const status = document.querySelector<HTMLElement>('#status')!;
@@ -41,10 +41,13 @@ async function getActiveTab(): Promise<chrome.tabs.Tab> {
 
 async function ensureContentScript(tabId: number) {
   try {
-    await chrome.tabs.sendMessage(tabId, { type: 'DOMSHOT_PING' } satisfies ExtensionMessage);
-  } catch {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
-  }
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'DOMSHOT_PING' } satisfies ExtensionMessage) as { protocol?: number } | undefined;
+    if (response?.protocol === CONTENT_SCRIPT_PROTOCOL) return;
+  } catch { /* Inject below when no current content script responds. */ }
+
+  await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+  const response = await chrome.tabs.sendMessage(tabId, { type: 'DOMSHOT_PING' } satisfies ExtensionMessage) as { protocol?: number } | undefined;
+  if (response?.protocol !== CONTENT_SCRIPT_PROTOCOL) throw new Error('页面中的 DOMShot 脚本未能更新，请刷新页面后重试');
 }
 
 async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_FULL_PAGE') {
@@ -56,8 +59,9 @@ async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_FULL_PAGE') {
   try {
     await chrome.storage.sync.set({ captureSettings: settings });
     const tab = await getActiveTab();
+    const pageZoom = await chrome.tabs.getZoom(tab.id!);
     await ensureContentScript(tab.id!);
-    await chrome.tabs.sendMessage(tab.id!, { type, settings } satisfies ExtensionMessage);
+    await chrome.tabs.sendMessage(tab.id!, { type, settings, pageZoom } satisfies ExtensionMessage);
     window.close();
   } catch (error) {
     button.disabled = false;
