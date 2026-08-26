@@ -267,11 +267,14 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
         <button class="download" type="button">下载 ${extension.toUpperCase()}</button>
       </div>
       <p class="feedback" role="status"></p>
+      <span class="copy-status" aria-live="polite" aria-atomic="true"></span>
     </aside>`;
 
   let retryToken: string | null = null;
+  let copyResetTimer: number | null = null;
   const cleanup = () => {
     if (retryToken) void chrome.runtime.sendMessage({ type: 'DOMSHOT_CANCEL_IMAGE_PERMISSION', token: retryToken } satisfies ExtensionMessage).catch(() => {});
+    if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
     URL.revokeObjectURL(url);
     window.removeEventListener('message', onPermissionMessage);
     removeHost(host);
@@ -333,12 +336,27 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
     anchor.click();
     feedback(shadow, '已开始下载');
   });
-  shadow.querySelector('.copy')!.addEventListener('click', async () => {
+  const copyButton = shadow.querySelector<HTMLButtonElement>('.copy')!;
+  const copyStatus = shadow.querySelector<HTMLElement>('.copy-status')!;
+  const resetCopyButton = () => {
+    copyButton.classList.remove('is-success');
+    copyButton.textContent = '复制图片';
+    copyStatus.textContent = '';
+    copyResetTimer = null;
+  };
+  copyButton.addEventListener('click', async () => {
     try {
       const png = format === 'png' ? blob : await toPngBlob(image);
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
-      feedback(shadow, format === 'png' ? '图片已复制' : '已转为 PNG 并复制');
+      if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
+      feedback(shadow, '');
+      copyButton.classList.add('is-success');
+      copyButton.textContent = '✓ 已复制';
+      copyStatus.textContent = format === 'png' ? '图片已复制' : '已转为 PNG 并复制';
+      copyResetTimer = window.setTimeout(resetCopyButton, 1800);
     } catch {
+      if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
+      resetCopyButton();
       feedback(shadow, '浏览器未允许访问剪贴板', true);
     }
   });
@@ -552,7 +570,7 @@ function selectorMarkup() {
 
 function previewStyles() {
   return `
-    :host{position:fixed;inset:auto;left:var(--domshot-viewport-left,0);top:var(--domshot-viewport-top,0);display:flex;box-sizing:border-box;width:var(--domshot-viewport-width,100vw);height:var(--domshot-viewport-height,100vh);align-items:flex-end;justify-content:flex-end;padding:calc(18px * var(--domshot-ui-scale,1))}.preview-card{width:336px;flex:none;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);transform:scale(var(--domshot-ui-scale,1));transform-origin:right bottom;pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.status-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.has-resource-warning .status-dot{background:#f59e0b}.is-authorizing .status-dot{background:linear-gradient(135deg,#2563eb,#8b5cf6)}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.resource-warning{display:grid;gap:7px;margin:8px 0 0;padding:8px 10px;border:1px solid #fde68a;border-radius:9px;color:#92400e;background:#fffbeb;font-size:10px;line-height:1.45}.grant-images{min-height:31px;border:1px solid #f3c44e;border-radius:8px;color:#78350f;background:#fff;font-size:9px;font-weight:800;cursor:pointer}.grant-images:hover{border-color:#d79b16;background:#fffcf2}.grant-images:disabled{cursor:wait;opacity:.65}.permission-panel{display:grid;gap:5px}.permission-panel[hidden]{display:none}.permission-panel iframe{display:block;width:100%;height:292px;border:0;border-radius:12px;background:#f8fafc}.open-permission-window{min-height:25px;border:0;color:#64748b;background:transparent;font-size:8px;cursor:pointer}.open-permission-window:hover{color:#2563eb;text-decoration:underline;text-underline-offset:2px}.is-authorizing .image-stage,.is-authorizing .resource-warning,.is-authorizing .meta,.is-authorizing .preview-actions,.is-authorizing .feedback{display:none}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
+    :host{position:fixed;inset:auto;left:var(--domshot-viewport-left,0);top:var(--domshot-viewport-top,0);display:flex;box-sizing:border-box;width:var(--domshot-viewport-width,100vw);height:var(--domshot-viewport-height,100vh);align-items:flex-end;justify-content:flex-end;padding:calc(18px * var(--domshot-ui-scale,1))}.preview-card{width:336px;flex:none;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);transform:scale(var(--domshot-ui-scale,1));transform-origin:right bottom;pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.status-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.has-resource-warning .status-dot{background:#f59e0b}.is-authorizing .status-dot{background:linear-gradient(135deg,#2563eb,#8b5cf6)}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.resource-warning{display:grid;gap:7px;margin:8px 0 0;padding:8px 10px;border:1px solid #fde68a;border-radius:9px;color:#92400e;background:#fffbeb;font-size:10px;line-height:1.45}.grant-images{min-height:31px;border:1px solid #f3c44e;border-radius:8px;color:#78350f;background:#fff;font-size:9px;font-weight:800;cursor:pointer}.grant-images:hover{border-color:#d79b16;background:#fffcf2}.grant-images:disabled{cursor:wait;opacity:.65}.permission-panel{display:grid;gap:5px}.permission-panel[hidden]{display:none}.permission-panel iframe{display:block;width:100%;height:292px;border:0;border-radius:12px;background:#f8fafc}.open-permission-window{min-height:25px;border:0;color:#64748b;background:transparent;font-size:8px;cursor:pointer}.open-permission-window:hover{color:#2563eb;text-decoration:underline;text-underline-offset:2px}.is-authorizing .image-stage,.is-authorizing .resource-warning,.is-authorizing .meta,.is-authorizing .preview-actions,.is-authorizing .feedback{display:none}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .copy.is-success{border-color:#86efac;color:#047857;background:#ecfdf5}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}.copy-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
 }
 
 function toastStyles() {

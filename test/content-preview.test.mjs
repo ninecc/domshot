@@ -78,6 +78,41 @@ test('content preview remains stable across script updates and zoom changes', as
       assert.ok(Math.abs(after.top - before.top) < 0.1, `preview moved vertically from ${before.top}px to ${after.top}px`);
       assert.ok(Math.abs(after.rightGap - before.rightGap) < 0.1, `preview right gap changed from ${before.rightGap}px to ${after.rightGap}px`);
     });
+
+    await context.test('shows copy success inside the button without resizing the preview', async () => {
+      await page.evaluate(`(() => {
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: { write: async (items) => { globalThis.__domshotCopiedItems = items; } }
+        });
+        Object.defineProperty(globalThis, 'ClipboardItem', {
+          configurable: true,
+          value: class ClipboardItem { constructor(items) { this.items = items; } }
+        });
+      })()`);
+      await capturePage(page, 1);
+      const beforeHeight = await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card').getBoundingClientRect().height`);
+      await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy').click()`);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy').textContent.includes('已复制')`, 'Copy button did not show success');
+      const result = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        const card = shadow.querySelector('.preview-card');
+        const button = shadow.querySelector('.copy');
+        return {
+          copied: globalThis.__domshotCopiedItems?.length === 1,
+          height: card.getBoundingClientRect().height,
+          buttonSuccess: button.classList.contains('is-success'),
+          feedback: shadow.querySelector('.feedback').textContent,
+          announcement: shadow.querySelector('.copy-status').textContent
+        };
+      })()`);
+
+      assert.equal(result.copied, true);
+      assert.equal(result.height, beforeHeight);
+      assert.equal(result.buttonSuccess, true);
+      assert.equal(result.feedback, '');
+      assert.equal(result.announcement, '图片已复制');
+    });
   });
 });
 
