@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { resolve } from 'node:path';
 import { withChromePage } from './support/chrome-page.mjs';
 
@@ -63,6 +65,69 @@ test('content preview remains stable across script updates and zoom changes', as
   });
 });
 
+test('selected element reports cross-origin images that could not be embedded', async () => {
+  const imageServer = await listen((request, response) => {
+    if (request.url !== '/image.png' && request.url !== '/cors-image.png') {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(200, {
+      'content-type': 'image/png',
+      ...(request.url === '/cors-image.png' ? { 'access-control-allow-origin': '*' } : {}),
+    });
+    response.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==', 'base64'));
+  });
+  const imagePort = imageServer.address().port;
+  const pageServer = await listen((_request, response) => {
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    response.end(`<main id="target" style="width:240px;height:120px"><img id="cross-origin-image" src="http://127.0.0.1:${imagePort}/image.png" width="80" height="40"><img src="http://127.0.0.1:${imagePort}/cors-image.png" width="80" height="40"></main>`);
+  });
+  const pagePort = pageServer.address().port;
+
+  try {
+    await withChromePage({ url: `http://127.0.0.1:${pagePort}/` }, async (page) => {
+      assert.equal(await page.evaluate(`(() => {
+        const image = document.querySelector('#cross-origin-image');
+        return image.complete && image.naturalWidth > 0;
+      })()`), true, 'Fixture image should render before capture');
+      await page.evaluate(`
+        chrome.runtime = {
+          onMessage: {
+            addListener(listener) { globalThis.__domshotListener = listener; },
+            removeListener() {}
+          }
+        }`);
+      await page.evaluate(contentBundle);
+      await page.evaluate(`globalThis.__domshotListener({
+        type: 'DOMSHOT_SELECT',
+        settings: { format: 'png', scale: 1, embedFonts: false, reconcile: false },
+        pageZoom: 1
+      }, {}, () => {})`);
+      await page.evaluate(`(() => {
+        const rect = document.querySelector('#target').getBoundingClientRect();
+        const eventInit = { bubbles: true, clientX: rect.right - 20, clientY: rect.bottom - 20 };
+        document.dispatchEvent(new MouseEvent('mousemove', eventInit));
+        document.dispatchEvent(new MouseEvent('click', eventInit));
+      })()`);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Preview did not appear');
+
+      const warning = await page.evaluate(`(() => {
+        const card = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card');
+        return {
+          warned: card.classList.contains('has-resource-warning'),
+          title: card.querySelector('.preview-title').textContent,
+          message: card.querySelector('[role="alert"]')?.textContent || ''
+        };
+      })()`);
+      assert.equal(warning.warned, true);
+      assert.equal(warning.title, '截图完成，但部分图片加载失败');
+      assert.match(warning.message, /1 张图片/);
+    });
+  } finally {
+    await Promise.all([closeServer(pageServer), closeServer(imageServer)]);
+  }
+});
+
 async function capturePage(page, pageZoom) {
   await page.evaluate(`globalThis.__domshotListener({
     type: 'DOMSHOT_FULL_PAGE',
@@ -93,4 +158,15 @@ function previewMetrics(page, pageZoom) {
       imageHeight: image.naturalHeight
     };
   })()`);
+}
+
+async function listen(handler) {
+  const server = createServer(handler);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  return server;
+}
+
+function closeServer(server) {
+  return new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 }
