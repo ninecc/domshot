@@ -11,6 +11,7 @@ await mkdir(outdir, { recursive: true });
 await Promise.all([
   cp(resolve(root, 'public/manifest.json'), resolve(outdir, 'manifest.json')),
   cp(resolve(root, 'public/popup.html'), resolve(outdir, 'popup.html')),
+  cp(resolve(root, 'public/permission.html'), resolve(outdir, 'permission.html')),
   cp(resolve(root, 'LICENSE'), resolve(outdir, 'LICENSE.txt')),
   cp(resolve(root, 'THIRD_PARTY_NOTICES.md'), resolve(outdir, 'third-party-licenses.txt')),
   ...[16, 32, 48, 128].map((size) => cp(resolve(root, `public/icon${size}.png`), resolve(outdir, `icon${size}.png`))),
@@ -20,6 +21,7 @@ const config = {
   entryPoints: {
     background: resolve(root, 'src/background.ts'),
     popup: resolve(root, 'src/popup.ts'),
+    permission: resolve(root, 'src/permission.ts'),
     content: resolve(root, 'src/content.ts'),
   },
   bundle: true,

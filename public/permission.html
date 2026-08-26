@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>允许加载图片来源 · DOMShot</title>
+    <link rel="stylesheet" href="permission.css" />
+  </head>
+  <body>
+    <main class="permission-shell">
+      <header class="permission-head">
+        <img src="icon128.png" alt="" aria-hidden="true" />
+        <span>DOMShot · 图片访问</span>
+      </header>
+      <section class="permission-copy" aria-labelledby="permission-title">
+        <span class="permission-mark" aria-hidden="true">↗</span>
+        <p class="eyebrow">仅用于本次截图所需来源</p>
+        <h1 id="permission-title">允许加载跨域图片</h1>
+        <p>浏览器阻止了以下图片来源。授权后，DOMShot 会在本机读取图片并立即重新截图。</p>
+      </section>
+      <section class="origin-panel" aria-labelledby="origin-title">
+        <div class="origin-heading"><h2 id="origin-title">待授权来源</h2><span id="originCount">0 个</span></div>
+        <ul id="originList"></ul>
+      </section>
+      <div class="privacy-note"><strong>图片不会上传</strong><span>不携带登录 Cookie，不保存图片内容或浏览记录。</span></div>
+      <p class="permission-status" id="permissionStatus" role="status"></p>
+      <div class="permission-actions">
+        <button class="cancel" id="cancelPermission" type="button">暂不授权</button>
+        <button class="grant" id="grantPermission" type="button" disabled>允许并重新截图</button>
+      </div>
+    </main>
+    <script src="permission.js"></script>
+  </body>
+</html>

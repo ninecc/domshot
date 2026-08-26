@@ -1,6 +1,6 @@
 import { snapdom } from '@zumer/snapdom';
 import type { SnapdomPlugin } from '@zumer/snapdom';
-import type { CaptureFormat, CaptureSettings, ExtensionMessage } from './types';
+import type { CaptureFormat, CaptureSettings, ExtensionMessage, ResolvedImageResource } from './types';
 import { CONTENT_SCRIPT_PROTOCOL } from './types';
 
 declare global {
@@ -26,6 +26,7 @@ const hostCleanups = new WeakMap<Element, () => void>();
 let currentSession: ViewfinderSession | null = null;
 let currentPageZoom = 1;
 let currentPreviewUpdate: (() => void) | null = null;
+const pendingCaptureRetries = new Map<string, { target: Element; settings: CaptureSettings; label: string; expires: number }>();
 
 function installMessageListener() {
   const listener = (message: ExtensionMessage, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
@@ -54,6 +55,18 @@ function installMessageListener() {
       currentSession?.destroy();
       currentSession = null;
       void captureElement(document.documentElement, message.settings, '完整页面');
+      sendResponse({ started: true });
+      return;
+    }
+
+    if (message.type === 'DOMSHOT_RETRY_CAPTURE') {
+      const retry = pendingCaptureRetries.get(message.token);
+      pendingCaptureRetries.delete(message.token);
+      if (!retry || retry.expires < Date.now() || !retry.target.isConnected) {
+        sendResponse({ started: false });
+        return;
+      }
+      void captureElement(retry.target, retry.settings, retry.label);
       sendResponse({ started: true });
     }
   };
@@ -174,7 +187,16 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
     const image = await exportImage(result, settings.format);
     const blob = await imageToBlob(image, settings.format);
     progress.remove();
-    showPreview({ image, blob, format: settings.format, label, scale: settings.scale, failedImageCount: imageResources.failedCount() });
+    showPreview({
+      image,
+      blob,
+      format: settings.format,
+      label,
+      scale: settings.scale,
+      failedImageCount: imageResources.failedCount(),
+      failedImageUrls: imageResources.failedUrls(),
+      retry: { target, settings, label },
+    });
   } catch (error) {
     progress.remove();
     showError(error instanceof Error ? error.message : '页面资源无法转换为图片');
@@ -202,13 +224,15 @@ async function imageToBlob(image: HTMLImageElement, format: CaptureFormat): Prom
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('图片编码失败')), mime, .94));
 }
 
-function showPreview({ image, blob, format, label, scale, failedImageCount }: {
+function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, retry }: {
   image: HTMLImageElement;
   blob: Blob;
   format: CaptureFormat;
   label: string;
   scale: number;
   failedImageCount: number;
+  failedImageUrls: string[];
+  retry: { target: Element; settings: CaptureSettings; label: string };
 }) {
   removeExtensionUi();
   const host = createHost('preview');
@@ -218,6 +242,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount }: {
   const size = formatBytes(blob.size);
   const extension = format === 'jpg' ? 'jpg' : format;
   const hasResourceWarning = failedImageCount > 0;
+  const failedOrigins = imageOrigins(failedImageUrls);
   const previewTitle = hasResourceWarning ? '截图完成，但部分图片加载失败' : '截图完成';
   shadow.innerHTML = `
     ${sharedStyles()}
@@ -228,7 +253,11 @@ function showPreview({ image, blob, format, label, scale, failedImageCount }: {
         <button class="icon-button close" type="button" aria-label="关闭">×</button>
       </div>
       <div class="image-stage"><img src="${url}" alt="${escapeHtml(label)} 的截图预览" /></div>
-      ${hasResourceWarning ? `<div class="resource-warning" role="alert">${failedImageCount} 张图片加载失败，截图中已显示为占位内容。</div>` : ''}
+      ${hasResourceWarning ? `<div class="resource-warning" role="alert"><span>${failedImageCount} 张图片加载失败，截图中已显示为占位内容。</span>${failedOrigins.length ? `<button class="grant-images" type="button">授权 ${failedOrigins.length} 个图片来源并重试</button>` : ''}</div>` : ''}
+      <div class="permission-panel" hidden>
+        <iframe title="图片来源授权"></iframe>
+        <button class="open-permission-window" type="button">无法显示？在独立窗口打开</button>
+      </div>
       <div class="meta">
         <span>${escapeHtml(label)}</span>
         <span>${image.naturalWidth} × ${image.naturalHeight} · ${scale}× · ${size}</span>
@@ -240,11 +269,63 @@ function showPreview({ image, blob, format, label, scale, failedImageCount }: {
       <p class="feedback" role="status"></p>
     </aside>`;
 
+  let retryToken: string | null = null;
   const cleanup = () => {
+    if (retryToken) void chrome.runtime.sendMessage({ type: 'DOMSHOT_CANCEL_IMAGE_PERMISSION', token: retryToken } satisfies ExtensionMessage).catch(() => {});
     URL.revokeObjectURL(url);
+    window.removeEventListener('message', onPermissionMessage);
     removeHost(host);
   };
+  const card = shadow.querySelector<HTMLElement>('.preview-card')!;
+  const title = shadow.querySelector<HTMLElement>('.preview-title')!;
+  const statusDot = shadow.querySelector<HTMLElement>('.status-dot')!;
+  const permissionPanel = shadow.querySelector<HTMLElement>('.permission-panel')!;
+  const permissionFrame = permissionPanel.querySelector<HTMLIFrameElement>('iframe')!;
+  const restorePreview = () => {
+    card.classList.remove('is-authorizing');
+    card.setAttribute('aria-label', previewTitle);
+    title.textContent = previewTitle;
+    statusDot.textContent = '!';
+    permissionPanel.hidden = true;
+    permissionFrame.removeAttribute('src');
+  };
+  const onPermissionMessage = (event: MessageEvent) => {
+    if (event.source !== permissionFrame.contentWindow || event.data?.type !== 'DOMSHOT_PERMISSION_CANCEL') return;
+    restorePreview();
+  };
+  window.addEventListener('message', onPermissionMessage);
   shadow.querySelector('.close')!.addEventListener('click', cleanup);
+  const grantButton = shadow.querySelector<HTMLButtonElement>('.grant-images');
+  grantButton?.addEventListener('click', async () => {
+    retryToken ??= crypto.randomUUID();
+    pendingCaptureRetries.set(retryToken, { ...retry, expires: Date.now() + 10 * 60 * 1000 });
+    grantButton.disabled = true;
+    grantButton.textContent = '正在准备授权…';
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'DOMSHOT_PREPARE_IMAGE_PERMISSION',
+        token: retryToken,
+        origins: failedOrigins,
+      } satisfies ExtensionMessage) as { prepared?: boolean; frameUrl?: string } | undefined;
+      if (!response?.prepared || !response.frameUrl) throw new Error('授权内容未能准备');
+      card.classList.add('is-authorizing');
+      card.setAttribute('aria-label', '授权图片来源');
+      title.textContent = '授权图片来源';
+      statusDot.textContent = '↗';
+      permissionPanel.hidden = false;
+      permissionFrame.src = response.frameUrl;
+    } catch {
+      feedback(shadow, '无法加载授权内容，请重试', true);
+    } finally {
+      grantButton.disabled = false;
+      grantButton.textContent = `授权 ${failedOrigins.length} 个图片来源并重试`;
+    }
+  });
+  shadow.querySelector('.open-permission-window')!.addEventListener('click', async () => {
+    if (!retryToken) return;
+    const response = await chrome.runtime.sendMessage({ type: 'DOMSHOT_OPEN_IMAGE_PERMISSION', token: retryToken } satisfies ExtensionMessage) as { opened?: boolean } | undefined;
+    if (!response?.opened) feedback(shadow, '无法打开授权窗口，请重试', true);
+  });
   shadow.querySelector('.download')!.addEventListener('click', () => {
     const anchor = document.createElement('a');
     anchor.href = url;
@@ -362,15 +443,34 @@ function createImageResourceTracker() {
   const marker = 'data-domshot-image-resource';
   let trackedImages = 0;
   let failedImages = 0;
+  let failedImageUrls: string[] = [];
+  const trackedUrls = new Map<string, string>();
   const plugin: SnapdomPlugin = {
     name: 'image-resource-tracker',
-    afterClone({ clone }) {
+    async afterClone({ clone }) {
       if (!clone) return;
       const images = clone.matches('img[src]')
         ? [clone as HTMLImageElement]
         : Array.from(clone.querySelectorAll<HTMLImageElement>('img[src]'));
       trackedImages = images.length;
-      images.forEach((image, index) => image.setAttribute(marker, String(index)));
+      images.forEach((image, index) => {
+        const id = String(index);
+        image.setAttribute(marker, id);
+        const source = absoluteHttpUrl(image.getAttribute('src'), image.ownerDocument.baseURI);
+        if (source) trackedUrls.set(id, source);
+      });
+
+      const urls = Array.from(new Set(trackedUrls.values()));
+      if (!urls.length) return;
+      try {
+        const response = await chrome.runtime.sendMessage({ type: 'DOMSHOT_RESOLVE_IMAGES', urls } satisfies ExtensionMessage) as { resources?: ResolvedImageResource[] } | undefined;
+        const resolved = new Map(response?.resources?.filter((resource) => resource.dataUrl).map((resource) => [resource.url, resource.dataUrl!]) ?? []);
+        images.forEach((image) => {
+          const source = trackedUrls.get(image.getAttribute(marker) || '');
+          const dataUrl = source && resolved.get(source);
+          if (dataUrl) image.setAttribute('src', dataUrl);
+        });
+      } catch { /* SnapDOM can still resolve resources that already permit CORS. */ }
     },
     beforeRender({ clone }) {
       if (!clone) return;
@@ -379,11 +479,36 @@ function createImageResourceTracker() {
         : Array.from(clone.querySelectorAll<HTMLImageElement>(`img[${marker}]`));
       const embeddedImages = remainingImages.filter((image) => image.getAttribute('src')?.startsWith('data:')).length;
       failedImages = Math.max(0, trackedImages - embeddedImages);
+      const embeddedIds = new Set(remainingImages
+        .filter((image) => image.getAttribute('src')?.startsWith('data:'))
+        .map((image) => image.getAttribute(marker)!));
+      failedImageUrls = Array.from(new Set(Array.from(trackedUrls)
+        .filter(([id]) => !embeddedIds.has(id))
+        .map(([, url]) => url)));
       remainingImages.forEach((image) => image.removeAttribute(marker));
     },
   };
 
-  return { plugin, failedCount: () => failedImages };
+  return { plugin, failedCount: () => failedImages, failedUrls: () => failedImageUrls };
+}
+
+function absoluteHttpUrl(value: string | null, baseUrl: string): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value, baseUrl);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function imageOrigins(urls: string[]) {
+  return Array.from(new Set(urls.map((url) => {
+    try {
+      const parsed = new URL(url);
+      return `${parsed.protocol}//${parsed.hostname}`;
+    } catch { return ''; }
+  }).filter(Boolean))).slice(0, 16);
 }
 
 function safeFilename(value: string): string {
@@ -427,7 +552,7 @@ function selectorMarkup() {
 
 function previewStyles() {
   return `
-    :host{position:absolute;inset:auto;left:var(--domshot-viewport-left,0);top:var(--domshot-viewport-top,0);display:flex;box-sizing:border-box;width:var(--domshot-viewport-width,100vw);height:var(--domshot-viewport-height,100vh);align-items:flex-end;justify-content:flex-end;padding:calc(18px * var(--domshot-ui-scale,1))}.preview-card{width:336px;flex:none;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);transform:scale(var(--domshot-ui-scale,1));transform-origin:right bottom;pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.status-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.has-resource-warning .status-dot{background:#f59e0b}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.resource-warning{margin:8px 0 0;padding:8px 10px;border:1px solid #fde68a;border-radius:9px;color:#92400e;background:#fffbeb;font-size:10px;line-height:1.45}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
+    :host{position:absolute;inset:auto;left:var(--domshot-viewport-left,0);top:var(--domshot-viewport-top,0);display:flex;box-sizing:border-box;width:var(--domshot-viewport-width,100vw);height:var(--domshot-viewport-height,100vh);align-items:flex-end;justify-content:flex-end;padding:calc(18px * var(--domshot-ui-scale,1))}.preview-card{width:336px;flex:none;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);transform:scale(var(--domshot-ui-scale,1));transform-origin:right bottom;pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.status-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.has-resource-warning .status-dot{background:#f59e0b}.is-authorizing .status-dot{background:linear-gradient(135deg,#2563eb,#8b5cf6)}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.resource-warning{display:grid;gap:7px;margin:8px 0 0;padding:8px 10px;border:1px solid #fde68a;border-radius:9px;color:#92400e;background:#fffbeb;font-size:10px;line-height:1.45}.grant-images{min-height:31px;border:1px solid #f3c44e;border-radius:8px;color:#78350f;background:#fff;font-size:9px;font-weight:800;cursor:pointer}.grant-images:hover{border-color:#d79b16;background:#fffcf2}.grant-images:disabled{cursor:wait;opacity:.65}.permission-panel{display:grid;gap:5px}.permission-panel[hidden]{display:none}.permission-panel iframe{display:block;width:100%;height:292px;border:0;border-radius:12px;background:#f8fafc}.open-permission-window{min-height:25px;border:0;color:#64748b;background:transparent;font-size:8px;cursor:pointer}.open-permission-window:hover{color:#2563eb;text-decoration:underline;text-underline-offset:2px}.is-authorizing .image-stage,.is-authorizing .resource-warning,.is-authorizing .meta,.is-authorizing .preview-actions,.is-authorizing .feedback{display:none}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
 }
 
 function toastStyles() {
