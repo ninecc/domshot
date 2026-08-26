@@ -54,10 +54,24 @@ DOMShot 不申请持久读取全部网站的权限，也不包含遥测或图片
 npm run dev       # 源码变化时持续构建
 npm run typecheck # 检查 TypeScript
 npm test          # 构建并运行浏览器行为测试
-npm run check     # 类型检查和测试
+npm run check     # 类型检查、changelog 校验和测试
 ```
 
 浏览器测试通过 `puppeteer-core` 使用本机 Chrome。需要使用其他 Chrome 或 Chromium 时，可设置 `DOMSHOT_CHROME_PATH`。详情参见 [test/README.md](./test/README.md)。
+
+## Changelog 与发布
+
+每个 PR 必须在 [`.changes`](./.changes/README.md) 中提交一份经过审核的 JSON fragment；仅内部改动则添加 `changelog: skip` 标签。Fragment 只描述用户可以观察到的结果，并由 `npm run changelog:check` 校验；开发者不直接编辑 `CHANGELOG.md`。
+
+本地准备版本：
+
+```bash
+npm run release:prepare -- 0.2.0
+```
+
+该命令会校验并消费所有 fragment、生成 [`CHANGELOG.md`](./CHANGELOG.md) 的新版本章节，并同步更新 `package.json`、`package-lock.json` 和 `public/manifest.json` 中的版本号。GitHub 的 **Prepare release** 工作流执行相同流程，并创建 `release/v*` PR 供审核。
+
+仓库维护者需要创建 `changelog: skip` 标签、允许 GitHub Actions 创建 PR，并将 `CI / check` 设置为 `main` 的必需状态检查。发布工作流会为自动生成的 PR 显式触发 CI。
 
 ## 已知限制
 

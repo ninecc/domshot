@@ -54,10 +54,24 @@ DOMShot does not request persistent access to every website and contains no tele
 npm run dev       # rebuild on source changes
 npm run typecheck # check TypeScript
 npm test          # build and run browser behaviour tests
-npm run check     # typecheck and test
+npm run check     # typecheck, changelog validation, and tests
 ```
 
 Browser tests use `puppeteer-core` with the locally installed Chrome. Set `DOMSHOT_CHROME_PATH` to use another Chrome or Chromium executable. See [test/README.md](./test/README.md) for details.
+
+## Changelog and releases
+
+Every pull request must add a reviewed JSON fragment under [`.changes`](./.changes/README.md), or use the `changelog: skip` label for internal-only work. Fragments describe observable user results and are schema checked by `npm run changelog:check`; contributors do not edit `CHANGELOG.md` directly.
+
+To prepare a release locally:
+
+```bash
+npm run release:prepare -- 0.2.0
+```
+
+The command validates and consumes all fragments, writes the new [`CHANGELOG.md`](./CHANGELOG.md) section, and synchronizes the version in `package.json`, `package-lock.json`, and `public/manifest.json`. The **Prepare release** GitHub workflow performs the same operation and opens a `release/v*` pull request for review.
+
+Repository maintainers must create the `changelog: skip` label, allow GitHub Actions to create pull requests, and protect `main` with the `CI / check` status check. The release workflow explicitly dispatches CI for its generated pull request.
 
 ## Limitations
 

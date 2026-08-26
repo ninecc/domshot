@@ -1,0 +1,46 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version in x.y.z format
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Prepare version and changelog
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: npm run release:prepare -- "$RELEASE_VERSION"
+      - run: npm run check
+      - name: Create release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          branch="release/v${RELEASE_VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add CHANGELOG.md package.json package-lock.json public/manifest.json .changes
+          git commit -m "chore: release v${RELEASE_VERSION}"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "chore: release v${RELEASE_VERSION}" --body "Automated release preparation for DOMShot ${RELEASE_VERSION}."
+          gh workflow run ci.yml --ref "$branch"
