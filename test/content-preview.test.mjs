@@ -7,7 +7,7 @@ import { resolve } from 'node:path';
 import { withChromePage } from './support/chrome-page.mjs';
 
 const contentBundle = await readFile(resolve(import.meta.dirname, '../dist/content.js'), 'utf8');
-const fixtureUrl = 'data:text/html,<main><h1>DOMShot zoom test</h1><p>Stable capture content</p></main>';
+const fixtureUrl = 'data:text/html,<main style="min-height:3000px"><h1>DOMShot zoom test</h1><p>Stable capture content</p></main>';
 
 test('content preview remains stable across script updates and zoom changes', async (context) => {
   await withChromePage({ url: fixtureUrl }, async (page) => {
@@ -61,6 +61,22 @@ test('content preview remains stable across script updates and zoom changes', as
       })()`);
       assert.equal(changedZoom.pageZoom, '0.33');
       assert.ok(Math.abs(changedZoom.screenWidth - 336) < 0.1, `preview width is ${changedZoom.screenWidth}px after live zoom`);
+    });
+
+    await context.test('keeps the preview fixed while the page scrolls', async () => {
+      await page.setPageScale(1);
+      await page.evaluate('scrollTo(0, 0)');
+      await capturePage(page, 1);
+      const before = await previewViewportPosition(page);
+      await page.evaluate('scrollTo(0, 800)');
+      await page.nextFrames();
+      const after = await previewViewportPosition(page);
+
+      assert.equal(await page.evaluate('scrollY'), 800, 'Fixture should scroll before checking the preview');
+      assert.equal(before.position, 'fixed', 'Preview host should rely on viewport positioning instead of scroll compensation');
+      assert.equal(after.position, 'fixed');
+      assert.ok(Math.abs(after.top - before.top) < 0.1, `preview moved vertically from ${before.top}px to ${after.top}px`);
+      assert.ok(Math.abs(after.rightGap - before.rightGap) < 0.1, `preview right gap changed from ${before.rightGap}px to ${after.rightGap}px`);
     });
   });
 });
@@ -202,6 +218,14 @@ function previewMetrics(page, pageZoom) {
       imageWidth: image.naturalWidth,
       imageHeight: image.naturalHeight
     };
+  })()`);
+}
+
+function previewViewportPosition(page) {
+  return page.evaluate(`(() => {
+    const card = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card');
+    const rect = card.getBoundingClientRect();
+    return { position: getComputedStyle(card.getRootNode().host).position, top: rect.top, rightGap: innerWidth - rect.right };
   })()`);
 }
 
