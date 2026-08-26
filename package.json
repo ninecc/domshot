@@ -7,7 +7,9 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "check": "npm run typecheck && npm test",
+    "changelog:check": "node scripts/changelog-check.mjs",
+    "check": "npm run typecheck && npm run changelog:check && npm test",
+    "release:prepare": "node scripts/release.mjs",
     "test": "npm run build && node --test --test-concurrency=1 test/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "dev": "node scripts/build.mjs --watch"

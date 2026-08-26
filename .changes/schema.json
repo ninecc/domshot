@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DOMShot changelog fragment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "scope", "summary"],
+  "properties": {
+    "$schema": { "const": "./schema.json" },
+    "type": { "enum": ["added", "changed", "fixed", "removed", "security"] },
+    "scope": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$" },
+    "summary": { "type": "string", "minLength": 8, "maxLength": 180 },
+    "breaking": { "type": "boolean" },
+    "references": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^(#\\d+|https://\\S+)$" }
+    }
+  }
+}
