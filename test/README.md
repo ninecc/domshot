@@ -25,8 +25,9 @@ CI must either install Google Chrome or set `DOMSHOT_CHROME_PATH` to a provision
 ## Structure
 
 - `popup.test.mjs` verifies computed popup layout and interaction styles in Chrome.
-- `content-preview.test.mjs` verifies content-script takeover, capture dimensions, and page/pinch zoom compensation.
-- `background-zoom.test.mjs` verifies forwarding of Chrome tab zoom events.
+- `content-preview.test.mjs` verifies content-script takeover, capture dimensions, zoom compensation, cross-origin image warnings, and authorized retries.
+- `permission.test.mjs` verifies that a declined host permission can be requested again and resumes the capture after approval.
+- `background-zoom.test.mjs` verifies tab zoom forwarding, exact-origin permission state, and background image resolution.
 - `support/chrome-page.mjs` owns browser launch, page setup, CDP access, waiting, and cleanup behind the `withChromePage` interface.
 
 Puppeteer is preferred here because DOMShot targets Chrome MV3, uses CDP-specific zoom emulation, and keeps `node:test` as the single test runner. A migration to Playwright would make sense if the project later needs multi-browser projects, tracing, or a larger end-to-end suite.

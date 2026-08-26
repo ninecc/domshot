@@ -91,10 +91,25 @@ test('selected element reports cross-origin images that could not be embedded', 
         return image.complete && image.naturalWidth > 0;
       })()`), true, 'Fixture image should render before capture');
       await page.evaluate(`
+        globalThis.__domshotProxyEnabled = false;
+        globalThis.__domshotPermissionRequest = null;
         chrome.runtime = {
           onMessage: {
             addListener(listener) { globalThis.__domshotListener = listener; },
             removeListener() {}
+          },
+          async sendMessage(message) {
+            if (message.type === 'DOMSHOT_RESOLVE_IMAGES') {
+              return {
+                resources: message.urls.map((url) => globalThis.__domshotProxyEnabled
+                  ? { url, dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==' }
+                  : { url, reason: 'permission' })
+              };
+            }
+            if (message.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION') {
+              globalThis.__domshotPermissionRequest = message;
+              return { prepared: true, frameUrl: 'about:blank' };
+            }
           }
         }`);
       await page.evaluate(contentBundle);
@@ -122,6 +137,36 @@ test('selected element reports cross-origin images that could not be embedded', 
       assert.equal(warning.warned, true);
       assert.equal(warning.title, '截图完成，但部分图片加载失败');
       assert.match(warning.message, /1 张图片/);
+      assert.match(warning.message, /授权 1 个图片来源并重试/);
+
+      await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.grant-images').click()`);
+      await page.waitUntil(`globalThis.__domshotPermissionRequest?.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION'`, 'Permission request was not prepared');
+      await page.waitUntil(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card').classList.contains('is-authorizing')`, 'Preview card did not enter its inline permission state');
+      const authorizationState = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        return {
+          title: shadow.querySelector('.preview-title').textContent,
+          frameVisible: !shadow.querySelector('.permission-panel').hidden,
+          previewVisible: getComputedStyle(shadow.querySelector('.image-stage')).display !== 'none',
+          containsDomain: shadow.querySelector('.preview-card').textContent.includes('127.0.0.1')
+        };
+      })()`);
+      assert.equal(authorizationState.title, '授权图片来源');
+      assert.equal(authorizationState.frameVisible, true);
+      assert.equal(authorizationState.previewVisible, false);
+      assert.equal(authorizationState.containsDomain, false, 'Result card should leave the domain list to the permission view');
+      const retried = await page.evaluate(`(() => {
+        globalThis.__domshotProxyEnabled = true;
+        let response;
+        globalThis.__domshotListener({ type: 'DOMSHOT_RETRY_CAPTURE', token: globalThis.__domshotPermissionRequest.token }, {}, (value) => { response = value; });
+        return response?.started === true;
+      })()`);
+      assert.equal(retried, true);
+      await page.waitUntil(`(() => {
+        const host = document.querySelector('#domshot-extension-root');
+        return host?.dataset.domshotUi === 'preview' && !host.shadowRoot.querySelector('.has-resource-warning');
+      })()`, 'Retried capture did not resolve the cross-origin image');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-title').textContent`), '截图完成');
     });
   } finally {
     await Promise.all([closeServer(pageServer), closeServer(imageServer)]);
