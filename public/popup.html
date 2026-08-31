@@ -8,42 +8,56 @@
   </head>
   <body>
     <main class="shell">
-      <header class="masthead">
-        <div class="brand" aria-label="DOMShot">
-          <img class="brand-mark" src="icon128.png" alt="" aria-hidden="true" />
-          <span class="wordmark">DOM<span>Shot</span></span>
+      <section class="panel home-panel" id="homePanel" aria-label="截图主页">
+        <header class="masthead">
+          <div class="brand" aria-label="DOMShot">
+            <img class="brand-mark" src="icon128.png" alt="" aria-hidden="true" />
+            <span class="wordmark">DOM<span>Shot</span></span>
+          </div>
+          <button class="settings-button" id="settingsButton" type="button" aria-label="打开设置" aria-controls="settingsPanel">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+          </button>
+        </header>
+
+        <section class="intro" aria-labelledby="intro-title"><h1 id="intro-title">精确捕获网页内容</h1><span>保留原有样式、字体与布局细节</span></section>
+
+        <section class="actions" aria-label="截图操作">
+          <button class="capture-action primary-action" id="selectElement" type="button"><span class="action-symbol frame-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong>截取页面元素</strong><small>悬停选择元素，单击即可截图</small></span><span class="chevron" aria-hidden="true">›</span></button>
+          <button class="capture-action secondary-action" id="capturePage" type="button"><span class="action-symbol page-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong>截取完整页面</strong><small>保存当前页面的全部内容</small></span><span class="chevron" aria-hidden="true">›</span></button>
+        </section>
+
+        <section class="output-settings" aria-labelledby="output-title">
+          <div class="section-heading"><h2 id="output-title">输出设置</h2><span id="pixelHint">当前 2×</span></div>
+          <div class="setting-row"><span>图片格式</span><div class="segment" role="radiogroup" aria-label="图片格式"><label><input type="radio" name="format" value="png" checked /><span>PNG</span></label><label><input type="radio" name="format" value="jpg" /><span>JPG</span></label><label><input type="radio" name="format" value="webp" /><span>WebP</span></label></div></div>
+          <div class="setting-row"><span>图片清晰度</span><div class="segment scale-segment" role="radiogroup" aria-label="图片清晰度"><label><input type="radio" name="scale" value="1" /><span>1×</span></label><label><input type="radio" name="scale" value="2" checked /><span>2×</span></label><label><input type="radio" name="scale" value="3" /><span>3×</span></label></div></div>
+        </section>
+
+      </section>
+
+      <section class="panel settings-panel" id="settingsPanel" aria-labelledby="settings-title" hidden>
+        <header class="settings-header">
+          <button class="back-button" id="backButton" type="button" aria-label="返回截图主页">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <h1 id="settings-title">设置</h1>
+        </header>
+
+        <section class="advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
+          <div class="advanced-heading"><h2 id="advanced-title">高级设置</h2><span class="autosave-status"><b aria-hidden="true">✓</b> 自动保存</span></div>
+          <div class="advanced-options">
+            <label class="toggle-row"><span><strong>嵌入网页字体</strong><small>提升自定义字体还原度，处理时间更长</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong>精确布局校准</strong><small>减少换行和布局偏差，处理时间约翻倍</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
+          </div>
+        </section>
+      </section>
+
+      <footer class="popup-footer">
+        <p class="status" id="status" role="status"><span aria-hidden="true">●</span> 准备就绪 · 图片仅在本地处理</p>
+        <div class="attribution">
+          Powered by <a href="https://snapdom.dev" target="_blank" rel="noreferrer noopener">SnapDOM</a>
+          <span aria-hidden="true">·</span>
+          <a href="third-party-licenses.txt" target="_blank">第三方许可</a>
         </div>
-        <button class="settings-button" id="settingsButton" type="button" aria-label="打开高级设置" aria-controls="advancedSettings" aria-expanded="false">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
-        </button>
-      </header>
-
-      <section class="intro" aria-labelledby="intro-title"><p>CAPTURE · INSPECT · EXTRACT</p><h1 id="intro-title">精确捕获网页元素</h1><span>保留样式、字体和清晰细节</span></section>
-
-      <section class="actions" aria-label="截图操作">
-        <button class="capture-action primary-action" id="selectElement" type="button"><span class="action-symbol frame-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong>提取页面元素</strong><small>悬停定位，单击完成捕获</small></span><span class="chevron" aria-hidden="true">›</span></button>
-        <button class="capture-action secondary-action" id="capturePage" type="button"><span class="action-symbol page-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong>捕获完整页面</strong><small>导出当前页面的全部内容</small></span><span class="chevron" aria-hidden="true">›</span></button>
-      </section>
-
-      <section class="output-settings" aria-labelledby="output-title">
-        <div class="section-heading"><h2 id="output-title">输出设置</h2><span id="pixelHint">2× 清晰度</span></div>
-        <div class="setting-row"><span>图片格式</span><div class="segment" role="radiogroup" aria-label="图片格式"><label><input type="radio" name="format" value="png" checked /><span>PNG</span></label><label><input type="radio" name="format" value="jpg" /><span>JPG</span></label><label><input type="radio" name="format" value="webp" /><span>WebP</span></label></div></div>
-        <div class="setting-row"><span>输出清晰度</span><div class="segment scale-segment" role="radiogroup" aria-label="输出清晰度"><label><input type="radio" name="scale" value="1" /><span>1×</span></label><label><input type="radio" name="scale" value="2" checked /><span>2×</span></label><label><input type="radio" name="scale" value="3" /><span>3×</span></label></div></div>
-      </section>
-
-      <section class="advanced-settings" id="advancedSettings" aria-labelledby="advanced-title" hidden>
-        <div class="advanced-heading"><div><h2 id="advanced-title">高级设置</h2><p>低频选项会自动保存</p></div><span>ADVANCED</span></div>
-        <div class="advanced-options">
-          <label class="toggle-row"><span><strong>嵌入网页字体</strong><small>提升自定义字体还原度，处理时间更长</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
-          <label class="toggle-row"><span><strong>精确布局校准</strong><small>减少换行和布局偏差，处理时间约翻倍</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
-        </div>
-      </section>
-
-      <p class="status" id="status" role="status"><span aria-hidden="true">●</span> 准备就绪 · 图片仅在本地处理</p>
-      <footer class="attribution">
-        Powered by <a href="https://snapdom.dev" target="_blank" rel="noreferrer noopener">SnapDOM</a>
-        <span aria-hidden="true">·</span>
-        <a href="third-party-licenses.txt" target="_blank">第三方许可</a>
       </footer>
     </main>
     <script src="popup.js"></script>

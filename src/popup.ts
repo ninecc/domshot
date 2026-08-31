@@ -9,7 +9,9 @@ const pageButton = document.querySelector<HTMLButtonElement>('#capturePage')!;
 const embedFonts = document.querySelector<HTMLInputElement>('#embedFonts')!;
 const reconcile = document.querySelector<HTMLInputElement>('#reconcile')!;
 const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButton')!;
-const advancedSettings = document.querySelector<HTMLElement>('#advancedSettings')!;
+const backButton = document.querySelector<HTMLButtonElement>('#backButton')!;
+const homePanel = document.querySelector<HTMLElement>('#homePanel')!;
+const settingsPanel = document.querySelector<HTMLElement>('#settingsPanel')!;
 
 function chosen<T extends string>(name: string): T {
   return document.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)!.value as T;
@@ -31,7 +33,7 @@ function applySettings(settings: CaptureSettings) {
   if (scale) scale.checked = true;
   embedFonts.checked = settings.embedFonts;
   reconcile.checked = settings.reconcile;
-  pixelHint.textContent = `${settings.scale}× 清晰度`;
+  pixelHint.textContent = `当前 ${settings.scale}×`;
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
@@ -76,7 +78,7 @@ async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_FULL_PAGE') {
 document.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
   input.addEventListener('change', async () => {
     const settings = readSettings();
-    pixelHint.textContent = `${settings.scale}× 清晰度`;
+    pixelHint.textContent = `当前 ${settings.scale}×`;
     await chrome.storage.sync.set({ captureSettings: settings });
   });
 });
@@ -84,10 +86,14 @@ document.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
 selectButton.addEventListener('click', () => void begin('DOMSHOT_SELECT'));
 pageButton.addEventListener('click', () => void begin('DOMSHOT_FULL_PAGE'));
 settingsButton.addEventListener('click', () => {
-  const opening = advancedSettings.hidden;
-  advancedSettings.hidden = !opening;
-  settingsButton.setAttribute('aria-expanded', String(opening));
-  settingsButton.setAttribute('aria-label', opening ? '关闭高级设置' : '打开高级设置');
+  homePanel.hidden = true;
+  settingsPanel.hidden = false;
+  requestAnimationFrame(() => backButton.focus());
+});
+backButton.addEventListener('click', () => {
+  settingsPanel.hidden = true;
+  homePanel.hidden = false;
+  requestAnimationFrame(() => settingsButton.focus());
 });
 
 chrome.storage.sync.get('captureSettings').then(({ captureSettings }) => {
