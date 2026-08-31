@@ -37,6 +37,7 @@ Open DOMShot on a regular web page, choose **Capture element**, **Capture visibl
 | Scale | 2× | Multiplies the exported pixel dimensions by 1×, 2×, or 3×. |
 | JPG/WebP quality | 92% | Controls lossy export quality and appears only for JPG or WebP. |
 | Language | Auto | Uses Chinese for Chinese browser locales and English otherwise; a manual choice overrides the browser. |
+| Appearance | Auto | Follows the system theme or forces Light or Dark across popup, preview, selector, toast, and permission UI. |
 | After capture | Preview | Shows the preview, copies automatically, or downloads automatically after a successful capture. |
 | File names | Smart | Uses the page title for full pages and the element label for element captures; page-title and timestamp-only modes are also available. |
 | Embed web fonts | On | Improves custom font fidelity, with additional processing time. |
