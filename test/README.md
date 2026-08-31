@@ -22,6 +22,10 @@ DOMSHOT_CHROME_PATH=/absolute/path/to/chrome npm test
 
 CI must either install Google Chrome or set `DOMSHOT_CHROME_PATH` to a provisioned browser executable.
 
+## Tooling rationale
+
+Puppeteer is preferred here because DOMShot targets Chrome MV3, uses CDP-specific zoom emulation, and keeps `node:test` as the single test runner. A migration to Playwright would make sense if the project later needs multi-browser projects, tracing, or a larger end-to-end suite.
+
 ## Structure
 
 - `popup.test.mjs` verifies computed popup layout and interaction styles in Chrome.
@@ -30,4 +34,20 @@ CI must either install Google Chrome or set `DOMSHOT_CHROME_PATH` to a provision
 - `background-zoom.test.mjs` verifies tab zoom forwarding, exact-origin permission state, and background image resolution.
 - `support/chrome-page.mjs` owns browser launch, page setup, CDP access, waiting, and cleanup behind the `withChromePage` interface.
 
-Puppeteer is preferred here because DOMShot targets Chrome MV3, uses CDP-specific zoom emulation, and keeps `node:test` as the single test runner. A migration to Playwright would make sense if the project later needs multi-browser projects, tracing, or a larger end-to-end suite.
+## Assertion principles
+
+1. **Assert contracts, not representations.** Tests should protect promised behaviour and outcomes without depending on incidental DOM structure, styling techniques, or serialization details.
+2. **Match strictness to contract strength.** Discrete state, data integrity, and safety boundaries deserve exact assertions; rendering, animation, and timing behaviour require appropriate tolerance.
+3. **Be sensitive to regressions and tolerant of intentional evolution.** Tests should catch real degradation without obstructing copy changes, visual iteration, or equivalent refactoring.
+4. **Prefer semantic relationships.** Compare state transitions, relative relationships, and structured meaning before raw strings, absolute pixels, or implementation order.
+5. **Make failures identify one contract.** Each test should have a clear purpose, and a failure should point directly to the user behaviour or system guarantee that broke.
+6. **Prove regression tests can detect the symptom.** Reproduce the failure before applying a fix, then use the same signal to verify the fix.
+7. **Control uncertainty explicitly.** Normalize or tolerate known variation from fonts, browser rendering, and asynchronous timing instead of relying on accidental stability.
+
+## Application notes
+
+- Popup and preview layout comparisons currently use a `0.5 CSS px` tolerance. Exported image pixel dimensions remain exact.
+- Structured values such as URLs are parsed before comparison; parameter ordering is not part of the contract.
+- Localized UI tests verify language selection, semantic state, and layout stability. Full copy is matched only when the wording itself is a product contract.
+- Interaction tests verify visible state changes and stable geometry without binding to exact RGB values unless a color token is explicitly under test.
+- Regression tests should first fail on the reported symptom, then pass after the fix.
