@@ -34,6 +34,34 @@ test('content preview remains stable across script updates and zoom changes', as
       assert.doesNotMatch(`${labels.title} ${labels.copy}`, /[\u4e00-\u9fff]/, 'English capture controls should not contain Chinese copy');
     });
 
+    await context.test('runs the configured post-capture action with safe preview fallback', async () => {
+      await page.evaluate(`(() => {
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: { write: async (items) => { globalThis.__domshotCopiedItems = items; } }
+        });
+        Object.defineProperty(globalThis, 'ClipboardItem', {
+          configurable: true,
+          value: class ClipboardItem { constructor(items) { this.items = items; } }
+        });
+      })()`);
+      await requestFullPage(page, { afterCapture: 'copy', outerShadows: true, compress: false });
+      await page.waitUntil(`globalThis.__domshotCopiedItems?.length === 1`, 'Automatic copy did not write the image');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi`), 'toast');
+
+      await page.evaluate(`HTMLAnchorElement.prototype.click = function () { globalThis.__domshotDownload = this.download; }`);
+      await requestFullPage(page, { afterCapture: 'download' });
+      await page.waitUntil(`Boolean(globalThis.__domshotDownload)`, 'Automatic download did not start');
+      assert.match(await page.evaluate(`globalThis.__domshotDownload`), /^domshot-.+\.png$/);
+
+      await page.evaluate(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async write() { throw new Error('denied'); } } })`);
+      await requestFullPage(page, { afterCapture: 'copy' });
+      await page.waitUntil(`(() => {
+        const host = document.querySelector('#domshot-extension-root');
+        return host?.dataset.domshotUi === 'preview' && host.shadowRoot.querySelector('.feedback.is-error')?.textContent.length > 0;
+      })()`, 'Failed automatic copy did not fall back to the preview');
+    });
+
     let baseline;
     await context.test('keeps size, placement, and capture dimensions across page and pinch zoom', async () => {
       const results = [];
@@ -154,6 +182,7 @@ test('selected element reports cross-origin images that could not be embedded', 
       await page.evaluate(`
         globalThis.__domshotProxyEnabled = false;
         globalThis.__domshotPermissionRequest = null;
+        HTMLAnchorElement.prototype.click = function () { globalThis.__domshotDownload = this.download; };
         chrome.runtime = {
           onMessage: {
             addListener(listener) { globalThis.__domshotListener = listener; },
@@ -176,7 +205,7 @@ test('selected element reports cross-origin images that could not be embedded', 
       await page.evaluate(contentBundle);
       await page.evaluate(`globalThis.__domshotListener({
         type: 'DOMSHOT_SELECT',
-        settings: { format: 'png', scale: 1, embedFonts: false, reconcile: false },
+        settings: { format: 'png', scale: 1, afterCapture: 'download', embedFonts: false, reconcile: false, outerShadows: false, compress: true },
         locale: 'zh-CN',
         pageZoom: 1
       }, {}, () => {})`);
@@ -229,9 +258,9 @@ test('selected element reports cross-origin images that could not be embedded', 
       assert.equal(retried, true);
       await page.waitUntil(`(() => {
         const host = document.querySelector('#domshot-extension-root');
-        return host?.dataset.domshotUi === 'preview' && !host.shadowRoot.querySelector('.has-resource-warning');
-      })()`, 'Retried capture did not resolve the cross-origin image');
-      assert.ok((await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-title').textContent`)).length > 0);
+        return host?.dataset.domshotUi === 'toast' && Boolean(globalThis.__domshotDownload);
+      })()`, 'Retried capture did not resolve the image and run the configured download');
+      assert.match(await page.evaluate(`globalThis.__domshotDownload`), /^domshot-.+\.png$/);
     });
   } finally {
     await Promise.all([closeServer(pageServer), closeServer(imageServer)]);
@@ -239,16 +268,21 @@ test('selected element reports cross-origin images that could not be embedded', 
 });
 
 async function capturePage(page, pageZoom, locale = 'zh-CN') {
-  await page.evaluate(`globalThis.__domshotListener({
-    type: 'DOMSHOT_FULL_PAGE',
-    settings: { format: 'png', scale: 1, embedFonts: false, reconcile: false },
-    locale: ${JSON.stringify(locale)},
-    pageZoom: ${pageZoom}
-  }, {}, () => {})`);
+  await requestFullPage(page, { pageZoom }, locale);
   await page.waitUntil(`(() => {
     const host = document.querySelector('#domshot-extension-root');
     return host?.dataset.domshotUi === 'preview' && Boolean(host.shadowRoot?.querySelector('.preview-card img')?.complete);
   })()`, 'Preview did not become ready');
+}
+
+async function requestFullPage(page, overrides = {}, locale = 'zh-CN') {
+  const { pageZoom = 1, ...settings } = overrides;
+  await page.evaluate(`globalThis.__domshotListener({
+    type: 'DOMSHOT_FULL_PAGE',
+    settings: ${JSON.stringify({ format: 'png', scale: 1, afterCapture: 'preview', embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
+    locale: ${JSON.stringify(locale)},
+    pageZoom: ${pageZoom}
+  }, {}, () => {})`);
 }
 
 function previewMetrics(page, pageZoom) {

@@ -45,6 +45,7 @@
         <section class="settings-group general-settings" aria-labelledby="general-title">
           <div class="advanced-heading"><h2 id="general-title" data-i18n="generalSettings">General</h2></div>
           <div class="setting-row language-row"><span data-i18n="language">Language</span><div class="segment language-segment" role="radiogroup" aria-label="Language" data-i18n-aria-label="language"><label><input type="radio" name="language" value="auto" checked /><span data-i18n="followBrowser">Auto</span></label><label><input type="radio" name="language" value="zh-CN" /><span data-i18n="chinese">中文</span></label><label><input type="radio" name="language" value="en" /><span data-i18n="english">English</span></label></div></div>
+          <div class="setting-row"><span data-i18n="afterCapture">After capture</span><div class="segment after-capture-segment" role="radiogroup" aria-label="After capture" data-i18n-aria-label="afterCapture"><label><input type="radio" name="afterCapture" value="preview" checked /><span data-i18n="showPreview">Preview</span></label><label><input type="radio" name="afterCapture" value="copy" /><span data-i18n="autoCopy">Copy</span></label><label><input type="radio" name="afterCapture" value="download" /><span data-i18n="autoDownload">Download</span></label></div></div>
         </section>
 
         <section class="settings-group advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
@@ -52,6 +53,8 @@
           <div class="advanced-options">
             <label class="toggle-row"><span><strong data-i18n="embedFonts">Embed web fonts</strong><small data-i18n="embedFontsDesc">Improves custom font fidelity but takes longer</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
             <label class="toggle-row"><span><strong data-i18n="reconcile">Precise layout calibration</strong><small data-i18n="reconcileDesc">More accurate layouts, about 2× slower</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="outerShadows">Keep outer shadows</strong><small data-i18n="outerShadowsDesc">Includes shadows and outlines around the root element</small></span><input id="outerShadows" type="checkbox" /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="compressImages">Optimize embedded images</strong><small data-i18n="compressImagesDesc">Downsamples images to their displayed size</small></span><input id="compressImages" type="checkbox" checked /><i aria-hidden="true"></i></label>
           </div>
         </section>
       </section>

@@ -1,7 +1,7 @@
 import { snapdom } from '@zumer/snapdom';
 import type { SnapdomPlugin } from '@zumer/snapdom';
 import type { CaptureFormat, CaptureSettings, ExtensionMessage, ResolvedImageResource, UiLocale } from './types';
-import { CONTENT_SCRIPT_PROTOCOL } from './types';
+import { CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import { plural, resolveLocale, t } from './i18n';
 
 declare global {
@@ -45,7 +45,7 @@ function installMessageListener() {
     if (message.type === 'DOMSHOT_SELECT') {
       setPageZoom(message.pageZoom);
       currentSession?.destroy();
-      currentSession = new ViewfinderSession(message.settings, message.locale ?? resolveLocale('auto'));
+      currentSession = new ViewfinderSession({ ...DEFAULT_SETTINGS, ...message.settings }, message.locale ?? resolveLocale('auto'));
       currentSession.start();
       sendResponse({ started: true });
       return;
@@ -56,7 +56,7 @@ function installMessageListener() {
       currentSession?.destroy();
       currentSession = null;
       const locale = message.locale ?? resolveLocale('auto');
-      void captureElement(document.documentElement, message.settings, t(locale, 'fullPage'), locale);
+      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale);
       sendResponse({ started: true });
       return;
     }
@@ -181,6 +181,8 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       dpr: 1,
       embedFonts: settings.embedFonts,
       reconcile: settings.reconcile,
+      outerShadows: settings.outerShadows,
+      compress: settings.compress,
       exclude: [`#${ROOT_ID}`, '[data-domshot-ui]'],
       backgroundColor: settings.format === 'png' ? undefined : '#ffffff',
       plugins: [imageResources.plugin],
@@ -189,7 +191,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
     const image = await exportImage(result, settings.format);
     const blob = await imageToBlob(image, settings.format, locale);
     progress.remove();
-    showPreview({
+    const previewOptions = {
       image,
       blob,
       format: settings.format,
@@ -199,7 +201,20 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       failedImageUrls: imageResources.failedUrls(),
       locale,
       retry: { target, settings, label, locale },
-    });
+    };
+    if (imageResources.failedCount() > 0 || settings.afterCapture === 'preview') {
+      showPreview(previewOptions);
+    } else if (settings.afterCapture === 'copy') {
+      try {
+        const announcement = await copyImageToClipboard(image, blob, settings.format, locale);
+        showToast(announcement);
+      } catch {
+        showPreview({ ...previewOptions, initialFeedback: { message: t(locale, 'copyFallback'), error: true } });
+      }
+    } else {
+      downloadBlob(blob, settings.format, label);
+      showToast(t(locale, 'downloadStarted'));
+    }
   } catch (error) {
     progress.remove();
     showError(error instanceof Error ? error.message : t(locale, 'pageResourceFailed'), locale);
@@ -227,7 +242,7 @@ async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, local
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'imageEncodeFailed'))), mime, .94));
 }
 
-function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, retry }: {
+function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, retry, initialFeedback }: {
   image: HTMLImageElement;
   blob: Blob;
   format: CaptureFormat;
@@ -237,6 +252,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   failedImageUrls: string[];
   locale: UiLocale;
   retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale };
+  initialFeedback?: { message: string; error: boolean };
 }) {
   removeExtensionUi();
   const host = createHost('preview');
@@ -353,13 +369,12 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   };
   copyButton.addEventListener('click', async () => {
     try {
-      const png = format === 'png' ? blob : await toPngBlob(image, locale);
-      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      const announcement = await copyImageToClipboard(image, blob, format, locale);
       if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
       feedback(shadow, '');
       copyButton.classList.add('is-success');
       copyButton.textContent = t(locale, 'copied');
-      copyStatus.textContent = t(locale, format === 'png' ? 'imageCopied' : 'convertedCopied');
+      copyStatus.textContent = announcement;
       copyResetTimer = window.setTimeout(resetCopyButton, 1800);
     } catch {
       if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
@@ -368,6 +383,22 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
     }
   });
   document.documentElement.appendChild(host);
+  if (initialFeedback) feedback(shadow, initialFeedback.message, initialFeedback.error);
+}
+
+async function copyImageToClipboard(image: HTMLImageElement, blob: Blob, format: CaptureFormat, locale: UiLocale): Promise<string> {
+  const png = format === 'png' ? blob : await toPngBlob(image, locale);
+  await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+  return t(locale, format === 'png' ? 'imageCopied' : 'convertedCopied');
+}
+
+function downloadBlob(blob: Blob, format: CaptureFormat, label: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `domshot-${safeFilename(label)}-${timestamp()}.${format}`;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 async function toPngBlob(image: HTMLImageElement, locale: UiLocale): Promise<Blob> {

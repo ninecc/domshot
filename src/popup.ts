@@ -10,6 +10,8 @@ const selectButton = document.querySelector<HTMLButtonElement>('#selectElement')
 const pageButton = document.querySelector<HTMLButtonElement>('#capturePage')!;
 const embedFonts = document.querySelector<HTMLInputElement>('#embedFonts')!;
 const reconcile = document.querySelector<HTMLInputElement>('#reconcile')!;
+const outerShadows = document.querySelector<HTMLInputElement>('#outerShadows')!;
+const compressImages = document.querySelector<HTMLInputElement>('#compressImages')!;
 const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButton')!;
 const backButton = document.querySelector<HTMLButtonElement>('#backButton')!;
 const homePanel = document.querySelector<HTMLElement>('#homePanel')!;
@@ -24,8 +26,11 @@ function readSettings(): CaptureSettings {
   return {
     format: chosen<CaptureSettings['format']>('format'),
     scale: Number(chosen('scale')) as CaptureSettings['scale'],
+    afterCapture: chosen<CaptureSettings['afterCapture']>('afterCapture'),
     embedFonts: embedFonts.checked,
     reconcile: reconcile.checked,
+    outerShadows: outerShadows.checked,
+    compress: compressImages.checked,
   };
 }
 
@@ -36,10 +41,14 @@ function readLanguagePreference(): LanguagePreference {
 function applySettings(settings: CaptureSettings) {
   const format = document.querySelector<HTMLInputElement>(`input[name="format"][value="${settings.format}"]`);
   const scale = document.querySelector<HTMLInputElement>(`input[name="scale"][value="${settings.scale}"]`);
+  const afterCapture = document.querySelector<HTMLInputElement>(`input[name="afterCapture"][value="${settings.afterCapture}"]`);
   if (format) format.checked = true;
   if (scale) scale.checked = true;
+  if (afterCapture) afterCapture.checked = true;
   embedFonts.checked = settings.embedFonts;
   reconcile.checked = settings.reconcile;
+  outerShadows.checked = settings.outerShadows;
+  compressImages.checked = settings.compress;
   pixelHint.textContent = t(activeLocale, 'currentScale', { scale: settings.scale });
 }
 

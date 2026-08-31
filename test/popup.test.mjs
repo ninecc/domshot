@@ -111,6 +111,8 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         backButtonVisible: document.querySelector('#backButton').getClientRects().length > 0,
         autosaveVisible: document.querySelector('.autosave-status').getClientRects().length > 0,
         languageOptionCount: document.querySelectorAll('input[name="language"]').length,
+        afterCaptureOptionCount: document.querySelectorAll('input[name="afterCapture"]').length,
+        afterCaptureDefault: document.querySelector('input[name="afterCapture"]:checked').value,
         footerVisible: getComputedStyle(document.querySelector('.popup-footer')).display !== 'none',
         outputSurface: (() => {
           const style = getComputedStyle(document.querySelector('.output-settings'));
@@ -129,6 +131,8 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         }),
         embedFontsChecked: document.querySelector('#embedFonts').checked,
         reconcileChecked: document.querySelector('#reconcile').checked,
+        outerShadowsChecked: document.querySelector('#outerShadows').checked,
+        compressImagesChecked: document.querySelector('#compressImages').checked,
         focusedElement: document.activeElement.id
       })));
     })`);
@@ -139,23 +143,30 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.settingsTitleVisible, true);
     assert.equal(metrics.backButtonVisible, true);
     assert.equal(metrics.autosaveVisible, true);
-    assert.ok(Math.abs(metrics.localeLayout.descriptionHeights[0] - metrics.localeLayout.descriptionHeights[1]) < 0.5, 'setting descriptions must reserve comparable text region heights');
+    assert.ok(Math.max(...metrics.localeLayout.descriptionHeights) - Math.min(...metrics.localeLayout.descriptionHeights) < 0.5, 'setting descriptions must reserve comparable text region heights');
     assert.equal(metrics.languageOptionCount, 3);
+    assert.equal(metrics.afterCaptureOptionCount, 3);
+    assert.equal(metrics.afterCaptureDefault, 'preview');
     assert.deepEqual(metrics.implicitLineHeights.filter(({ lineHeight }) => lineHeight === 'normal'), [], 'localized text must not rely on font-dependent normal line height');
     assert.equal(metrics.footerVisible, true, 'shared footer must remain visible on the settings panel');
     assert.equal(metrics.advancedSurface.backgroundImage, 'none', 'settings containers must not use decorative gradients');
     assert.equal(metrics.advancedSurface.backgroundColor, metrics.outputSurface.backgroundColor, 'settings containers should share one surface color');
     assert.notEqual(metrics.activeToggleGradient, 'none', 'active controls should retain the brand gradient');
     assert.equal(metrics.outputSettingsInPanel, false, 'the settings panel should only contain low-frequency options');
-    assert.equal(metrics.advancedOptionCount, 2);
+    assert.equal(metrics.advancedOptionCount, 4);
     assert.ok(Math.abs(metrics.advancedOptionRects[0].left - metrics.advancedOptionRects[1].left) < 0.5);
     assert.ok(Math.abs(metrics.advancedOptionRects[0].width - metrics.advancedOptionRects[1].width) < 0.5);
-    assert.ok(metrics.advancedOptionRects[1].top >= metrics.advancedOptionRects[0].bottom, 'advanced options must each occupy their own row');
+    metrics.advancedOptionRects.slice(1).forEach((rect, index) => {
+      assert.ok(rect.top >= metrics.advancedOptionRects[index].bottom, 'advanced options must each occupy their own row');
+    });
     assert.equal(metrics.embedFontsChecked, true);
     assert.equal(metrics.reconcileChecked, false);
+    assert.equal(metrics.outerShadowsChecked, false);
+    assert.equal(metrics.compressImagesChecked, true);
     assert.equal(metrics.focusedElement, 'backButton');
     assert.ok(metrics.scrollWidth <= 360, `expanded popup is ${metrics.scrollWidth}px wide`);
     assert.ok(metrics.scrollHeight <= 600, `expanded popup is ${metrics.scrollHeight}px tall and requires a scrollbar`);
+    assert.ok(metrics.localeLayout.shellHeight <= 600, `settings content is ${metrics.localeLayout.shellHeight}px tall`);
 
     const chinese = await page.evaluate(`(() => {
       document.querySelector('input[name="language"][value="zh-CN"]').click();
@@ -191,6 +202,21 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.notEqual(chinese.settingsTitle, initial.settingsTitle);
     assert.notEqual(chinese.generalTitle, initial.generalTitle);
     assertLayoutsClose(chinese.layout, metrics.localeLayout);
+
+    const savedPostAction = await page.evaluate(`(() => {
+      document.querySelector('input[name="afterCapture"][value="copy"]').click();
+      return globalThis.__syncStore.captureSettings?.afterCapture;
+    })()`);
+    assert.equal(savedPostAction, 'copy');
+    const savedAdvancedSettings = await page.evaluate(`(() => {
+      document.querySelector('#outerShadows').click();
+      document.querySelector('#compressImages').click();
+      return {
+        outerShadows: globalThis.__syncStore.captureSettings?.outerShadows,
+        compress: globalThis.__syncStore.captureSettings?.compress
+      };
+    })()`);
+    assert.deepEqual(savedAdvancedSettings, { outerShadows: true, compress: false });
 
     const toggleCloseStart = await page.evaluate(`(() => {
       const input = document.querySelector('#embedFonts');

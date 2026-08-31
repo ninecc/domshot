@@ -39,7 +39,7 @@ button:disabled { cursor: wait; opacity: .58; } .shell { padding: 14px 18px 10px
 .page-symbol { color: var(--brand-violet); background: #f3efff; } .page-symbol::before { position: absolute; inset: 8px 10px; border: 2px solid; border-radius: 3px; content: ""; }
 .page-symbol::after { position: absolute; left: 14px; right: 14px; bottom: 13px; height: 2px; background: currentColor; box-shadow: 0 -5px 0 currentColor; content: ""; opacity: .7; }
 
-.settings-panel { min-height: 336px; }
+.settings-panel { min-height: 498px; }
 .settings-header { display: grid; grid-template-columns: 38px 1fr; gap: 10px; align-items: center; height: 44px; }
 .settings-header h1 { margin: 0; font-size: 18px; line-height: 1.2; letter-spacing: -.025em; }
 .back-button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid #d9e2f5; border-radius: 10px; color: var(--brand-blue); background: rgba(255,255,255,.88); transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease; }
@@ -59,11 +59,13 @@ button:disabled { cursor: wait; opacity: .58; } .shell { padding: 14px 18px 10px
 .autosave-status { color: var(--slate); font-size: 8px; line-height: 14px; }
 .autosave-status b { color: var(--success); font-size: 10px; }
 .advanced-options { display: grid; grid-template-columns: minmax(0, 1fr); }
-.general-settings { height: 102px; }
-.advanced-settings { height: 174px; }
+.general-settings { height: 144px; }
+.advanced-settings { height: 294px; }
 .language-row { min-height: 48px; }
 .language-segment { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 150px; }
 .language-segment span { min-width: 0; padding-inline: 4px; white-space: nowrap; }
+.after-capture-segment { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 150px; }
+.after-capture-segment span { min-width: 0; padding-inline: 3px; white-space: nowrap; }
 .advanced-options .toggle-row { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; height: 60px; cursor: pointer; }
 .advanced-options .toggle-row + .toggle-row { border-top: 1px solid #e5e9f2; }
 .toggle-row strong, .toggle-row small { display: block; } .toggle-row strong { font-size: 10px; line-height: 14px; }

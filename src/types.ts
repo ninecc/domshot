@@ -1,15 +1,19 @@
 export type CaptureFormat = 'png' | 'jpg' | 'webp';
+export type PostCaptureAction = 'preview' | 'copy' | 'download';
 export type UiLocale = 'en' | 'zh-CN';
 export type LanguagePreference = 'auto' | UiLocale;
 
 export interface CaptureSettings {
   format: CaptureFormat;
   scale: 1 | 2 | 3;
+  afterCapture: PostCaptureAction;
   embedFonts: boolean;
   reconcile: boolean;
+  outerShadows: boolean;
+  compress: boolean;
 }
 
-export const CONTENT_SCRIPT_PROTOCOL = 4;
+export const CONTENT_SCRIPT_PROTOCOL = 5;
 
 export interface ResolvedImageResource {
   url: string;
@@ -33,6 +37,9 @@ export type ExtensionMessage =
 export const DEFAULT_SETTINGS: CaptureSettings = {
   format: 'png',
   scale: 2,
+  afterCapture: 'preview',
   embedFonts: true,
   reconcile: false,
+  outerShadows: false,
+  compress: true,
 };
