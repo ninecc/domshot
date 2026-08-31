@@ -30,6 +30,10 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       introTitle: document.querySelector('#intro-title').textContent,
       introEyebrow: Boolean(document.querySelector('.intro p')),
       actionLabels: [...document.querySelectorAll('.capture-action strong')].map((label) => label.textContent),
+      actionIcons: [...document.querySelectorAll('.action-symbol')].map((icon) => {
+        const rect = icon.getBoundingClientRect();
+        return { width: rect.width, height: rect.height, color: getComputedStyle(icon).color };
+      }),
       clarityLabel: document.querySelector('.scale-segment').parentElement.firstElementChild.textContent,
       pixelHint: document.querySelector('#pixelHint').textContent,
       qualityHidden: document.querySelector('#qualityRow').hidden,
@@ -45,8 +49,11 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(initial.footerInsidePanel, false, 'footer must be shared by both panels');
     assert.ok(initial.introTitle.length > 0);
     assert.equal(initial.introEyebrow, false, 'homepage should not include a decorative technical eyebrow');
-    assert.equal(initial.actionLabels.length, 2);
+    assert.equal(initial.actionLabels.length, 3);
     assert.ok(initial.actionLabels.every(Boolean));
+    assert.equal(initial.actionIcons.length, 3);
+    assert.ok(initial.actionIcons.every(({ width, height }) => width === 38 && height === 38));
+    assert.equal(new Set(initial.actionIcons.map(({ color }) => color)).size, 3, 'capture actions should have distinct semantic icon colors');
     assert.ok(initial.clarityLabel.length > 0);
     assert.match(initial.pixelHint, /2×/);
     assert.equal(initial.qualityHidden, true);

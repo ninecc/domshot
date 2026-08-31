@@ -34,6 +34,20 @@ test('content preview remains stable across script updates and zoom changes', as
       assert.doesNotMatch(`${labels.title} ${labels.copy}`, /[\u4e00-\u9fff]/, 'English capture controls should not contain Chinese copy');
     });
 
+    await context.test('captures only the current visible viewport', async () => {
+      await page.setPageScale(1);
+      await page.evaluate('scrollTo(0, 400)');
+      const viewport = await page.evaluate(`({ width: innerWidth, height: innerHeight })`);
+      await requestVisibleArea(page);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Visible-area preview did not appear');
+      const imageSize = await page.evaluate(`(() => {
+        const image = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.image-stage img');
+        return { width: image.naturalWidth, height: image.naturalHeight };
+      })()`);
+      assert.deepEqual(imageSize, viewport);
+      await page.evaluate('scrollTo(0, 0)');
+    });
+
     await context.test('runs the configured post-capture action with safe preview fallback', async () => {
       await page.evaluate(`(() => {
         Object.defineProperty(navigator, 'clipboard', {
@@ -299,6 +313,15 @@ async function requestFullPage(page, overrides = {}, locale = 'zh-CN') {
     settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
     locale: ${JSON.stringify(locale)},
     pageZoom: ${pageZoom}
+  }, {}, () => {})`);
+}
+
+async function requestVisibleArea(page, overrides = {}, locale = 'zh-CN') {
+  await page.evaluate(`globalThis.__domshotListener({
+    type: 'DOMSHOT_VISIBLE_AREA',
+    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...overrides })},
+    locale: ${JSON.stringify(locale)},
+    pageZoom: 1
   }, {}, () => {})`);
 }
 

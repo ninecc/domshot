@@ -9,6 +9,7 @@ const pixelHint = document.querySelector<HTMLElement>('#pixelHint')!;
 const qualityRow = document.querySelector<HTMLElement>('#qualityRow')!;
 const filenameHint = document.querySelector<HTMLElement>('#filenameHint')!;
 const selectButton = document.querySelector<HTMLButtonElement>('#selectElement')!;
+const visibleButton = document.querySelector<HTMLButtonElement>('#captureVisible')!;
 const pageButton = document.querySelector<HTMLButtonElement>('#capturePage')!;
 const embedFonts = document.querySelector<HTMLInputElement>('#embedFonts')!;
 const reconcile = document.querySelector<HTMLInputElement>('#reconcile')!;
@@ -102,11 +103,11 @@ async function ensureContentScript(tabId: number) {
   if (response?.protocol !== CONTENT_SCRIPT_PROTOCOL) throw new Error(t(activeLocale, 'scriptRefresh'));
 }
 
-async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_FULL_PAGE') {
-  const button = type === 'DOMSHOT_SELECT' ? selectButton : pageButton;
+async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_VISIBLE_AREA' | 'DOMSHOT_FULL_PAGE') {
+  const button = type === 'DOMSHOT_SELECT' ? selectButton : type === 'DOMSHOT_VISIBLE_AREA' ? visibleButton : pageButton;
   const settings = readSettings();
   button.disabled = true;
-  status.textContent = t(activeLocale, type === 'DOMSHOT_SELECT' ? 'openingViewfinder' : 'preparingPage');
+  status.textContent = t(activeLocale, type === 'DOMSHOT_SELECT' ? 'openingViewfinder' : type === 'DOMSHOT_VISIBLE_AREA' ? 'preparingVisible' : 'preparingPage');
 
   try {
     await chrome.storage.sync.set({ captureSettings: settings });
@@ -141,6 +142,7 @@ document.querySelectorAll<HTMLInputElement>('input[name="language"]').forEach((i
 });
 
 selectButton.addEventListener('click', () => void begin('DOMSHOT_SELECT'));
+visibleButton.addEventListener('click', () => void begin('DOMSHOT_VISIBLE_AREA'));
 pageButton.addEventListener('click', () => void begin('DOMSHOT_FULL_PAGE'));
 settingsButton.addEventListener('click', () => {
   homePanel.hidden = true;

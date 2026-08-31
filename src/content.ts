@@ -27,7 +27,8 @@ const hostCleanups = new WeakMap<Element, () => void>();
 let currentSession: ViewfinderSession | null = null;
 let currentPageZoom = 1;
 let currentPreviewUpdate: (() => void) | null = null;
-const pendingCaptureRetries = new Map<string, { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; expires: number }>();
+type CaptureClip = { x: number; y: number; width: number; height: number } | null;
+const pendingCaptureRetries = new Map<string, { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; clip: CaptureClip; expires: number }>();
 
 function installMessageListener() {
   const listener = (message: ExtensionMessage, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
@@ -56,7 +57,17 @@ function installMessageListener() {
       currentSession?.destroy();
       currentSession = null;
       const locale = message.locale ?? resolveLocale('auto');
-      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale);
+      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale, null);
+      sendResponse({ started: true });
+      return;
+    }
+
+    if (message.type === 'DOMSHOT_VISIBLE_AREA') {
+      setPageZoom(message.pageZoom);
+      currentSession?.destroy();
+      currentSession = null;
+      const locale = message.locale ?? resolveLocale('auto');
+      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'visibleArea'), locale, visibleViewportClip());
       sendResponse({ started: true });
       return;
     }
@@ -68,12 +79,22 @@ function installMessageListener() {
         sendResponse({ started: false });
         return;
       }
-      void captureElement(retry.target, retry.settings, retry.label, retry.locale);
+      void captureElement(retry.target, retry.settings, retry.label, retry.locale, retry.clip);
       sendResponse({ started: true });
     }
   };
   chrome.runtime.onMessage.addListener(listener);
   return () => chrome.runtime.onMessage.removeListener(listener);
+}
+
+function visibleViewportClip(): NonNullable<CaptureClip> {
+  const viewport = window.visualViewport;
+  return {
+    x: viewport?.pageLeft ?? window.scrollX,
+    y: viewport?.pageTop ?? window.scrollY,
+    width: viewport?.width ?? window.innerWidth,
+    height: viewport?.height ?? window.innerHeight,
+  };
 }
 
 class ViewfinderSession {
@@ -160,7 +181,7 @@ class ViewfinderSession {
     this.outline.classList.add('capturing');
     window.setTimeout(async () => {
       this.destroy();
-      await captureElement(target, this.settings, label, this.locale);
+      await captureElement(target, this.settings, label, this.locale, null);
     }, 120);
   };
 
@@ -172,7 +193,7 @@ class ViewfinderSession {
   };
 }
 
-async function captureElement(target: Element, settings: CaptureSettings, label: string, locale: UiLocale) {
+async function captureElement(target: Element, settings: CaptureSettings, label: string, locale: UiLocale, clip: CaptureClip) {
   const progress = showProgress(label, locale);
   const imageResources = createImageResourceTracker();
   try {
@@ -184,6 +205,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       reconcile: settings.reconcile,
       outerShadows: settings.outerShadows,
       compress: settings.compress,
+      clip,
       exclude: [`#${ROOT_ID}`, '[data-domshot-ui]'],
       backgroundColor: settings.format === 'png' ? undefined : '#ffffff',
       plugins: [imageResources.plugin],
@@ -203,7 +225,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       failedImageUrls: imageResources.failedUrls(),
       locale,
       filename,
-      retry: { target, settings, label, locale },
+      retry: { target, settings, label, locale, clip },
     };
     if (imageResources.failedCount() > 0 || settings.afterCapture === 'preview') {
       showPreview(previewOptions);
@@ -255,7 +277,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   failedImageUrls: string[];
   locale: UiLocale;
   filename: string;
-  retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale };
+  retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; clip: CaptureClip };
   initialFeedback?: { message: string; error: boolean };
 }) {
   removeExtensionUi();
