@@ -34,8 +34,12 @@ Open DOMShot on a regular web page, choose **Capture element** or **Capture full
 | --- | --- | --- |
 | Format | PNG | PNG preserves transparency; JPG and WebP use a white background. |
 | Scale | 2× | Multiplies the exported pixel dimensions by 1×, 2×, or 3×. |
+| Language | Auto | Uses Chinese for Chinese browser locales and English otherwise; a manual choice overrides the browser. |
+| After capture | Preview | Shows the preview, copies automatically, or downloads automatically after a successful capture. |
 | Embed web fonts | On | Improves custom font fidelity, with additional processing time. |
 | Reconcile layout | Off | Improves text wrapping in inline and table-cell elements, but can roughly double capture time. |
+| Keep outer shadows | Off | Includes shadows and outlines around the captured root element. |
+| Optimize embedded images | On | Downsamples embedded raster images to their displayed resolution to reduce file size. |
 
 Settings are saved automatically.
 
