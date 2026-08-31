@@ -84,7 +84,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
           const style = getComputedStyle(document.querySelector('.advanced-settings'));
           return { backgroundImage: style.backgroundImage, backgroundColor: style.backgroundColor };
         })(),
-        activeToggleGradient: getComputedStyle(document.querySelector('#embedFonts + i')).backgroundImage,
+        activeToggleGradient: getComputedStyle(document.querySelector('#embedFonts + i'), '::before').backgroundImage,
         outputSettingsInPanel: Boolean(document.querySelector('#settingsPanel .output-settings')),
         advancedOptionCount: document.querySelectorAll('.advanced-options .toggle-row').length,
         advancedOptionRects: [...document.querySelectorAll('.advanced-options .toggle-row')].map((row) => {
@@ -116,6 +116,15 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.focusedElement, 'backButton');
     assert.ok(metrics.scrollWidth <= 360, `expanded popup is ${metrics.scrollWidth}px wide`);
     assert.ok(metrics.scrollHeight <= 600, `expanded popup is ${metrics.scrollHeight}px tall and requires a scrollbar`);
+
+    const toggleCloseStart = await page.evaluate(`(() => {
+      const input = document.querySelector('#embedFonts');
+      const track = input.nextElementSibling;
+      input.click();
+      const style = getComputedStyle(track);
+      return { backgroundColor: style.backgroundColor, backgroundImage: style.backgroundImage };
+    })()`);
+    assert.equal(toggleCloseStart.backgroundColor, 'rgb(203, 213, 225)', 'toggle track must keep its neutral surface while the active gradient fades out');
 
     const returned = await page.evaluate(`new Promise((resolve) => {
       document.querySelector('#backButton').click();
