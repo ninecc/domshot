@@ -18,6 +18,7 @@ export async function withChromePage({ url, viewport = { width: 800, height: 600
     return await run({
       evaluate: (expression) => page.evaluate(expression),
       hover: (selector) => page.hover(selector),
+      moveMouse: (x, y) => page.mouse.move(x, y),
       setPageScale: (pageScaleFactor) => cdp.send('Emulation.setPageScaleFactor', { pageScaleFactor }),
       nextFrames: (count = 2) => page.evaluate((frameCount) => new Promise((resolve) => {
         let remaining = frameCount;

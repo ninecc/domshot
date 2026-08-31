@@ -72,7 +72,7 @@ test('content preview remains stable across script updates and zoom changes', as
       await requestFullPage(page, { afterCapture: 'copy' });
       await page.waitUntil(`(() => {
         const host = document.querySelector('#domshot-extension-root');
-        return host?.dataset.domshotUi === 'preview' && host.shadowRoot.querySelector('.feedback.is-error')?.textContent.length > 0;
+        return host?.dataset.domshotUi === 'preview' && host.shadowRoot.querySelector('.copy.is-error');
       })()`, 'Failed automatic copy did not fall back to the preview');
     });
 
@@ -148,7 +148,7 @@ test('content preview remains stable across script updates and zoom changes', as
       assert.ok(Math.abs(after.rightGap - before.rightGap) < 0.5, `preview right gap changed from ${before.rightGap}px to ${after.rightGap}px`);
     });
 
-    await context.test('shows copy success inside the button without resizing the preview', async () => {
+    await context.test('shows action feedback inside buttons without moving the preview', async () => {
       await page.evaluate(`(() => {
         Object.defineProperty(navigator, 'clipboard', {
           configurable: true,
@@ -171,16 +171,41 @@ test('content preview remains stable across script updates and zoom changes', as
           copied: globalThis.__domshotCopiedItems?.length === 1,
           height: card.getBoundingClientRect().height,
           buttonSuccess: button.classList.contains('is-success'),
-          feedback: shadow.querySelector('.feedback').textContent,
-          announcement: shadow.querySelector('.copy-status').textContent
+          announcement: shadow.querySelector('.action-status').textContent
         };
       })()`);
 
       assert.equal(result.copied, true);
       assert.ok(Math.abs(result.height - beforeHeight) < 0.5);
       assert.equal(result.buttonSuccess, true);
-      assert.equal(result.feedback, '');
       assert.ok(result.announcement.length > 0);
+
+      const downloadBefore = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        const button = shadow.querySelector('.download');
+        const rect = button.getBoundingClientRect();
+        return { cardHeight: shadow.querySelector('.preview-card').getBoundingClientRect().height, filter: getComputedStyle(button).filter, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      await page.moveMouse(downloadBefore.rect.left + downloadBefore.rect.width / 2, downloadBefore.rect.top + downloadBefore.rect.height / 2);
+      await page.nextFrames();
+      const downloadHovered = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.download');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { transform: style.transform, filter: style.filter, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      assert.equal(downloadHovered.transform, 'none');
+      assert.deepEqual(downloadHovered.rect, downloadBefore.rect);
+      assert.notEqual(downloadHovered.filter, downloadBefore.filter, 'download hover should visibly change the primary surface');
+
+      await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.download').click()`);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.download').classList.contains('is-success')`, 'Download button did not show success');
+      const downloadAfter = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        return { height: shadow.querySelector('.preview-card').getBoundingClientRect().height, announcement: shadow.querySelector('.action-status').textContent };
+      })()`);
+      assert.ok(Math.abs(downloadAfter.height - downloadBefore.cardHeight) < 0.5);
+      assert.ok(downloadAfter.announcement.length > 0);
     });
   });
 });

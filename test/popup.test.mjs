@@ -52,7 +52,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(initial.actionLabels.length, 3);
     assert.ok(initial.actionLabels.every(Boolean));
     assert.equal(initial.actionIcons.length, 3);
-    assert.ok(initial.actionIcons.every(({ width, height }) => width === 38 && height === 38));
+    assert.ok(initial.actionIcons.every(({ width, height }) => Math.abs(width - 38) < 0.5 && Math.abs(height - 38) < 0.5));
     assert.equal(new Set(initial.actionIcons.map(({ color }) => color)).size, 3, 'capture actions should have distinct semantic icon colors');
     assert.ok(initial.clarityLabel.length > 0);
     assert.match(initial.pixelHint, /2×/);

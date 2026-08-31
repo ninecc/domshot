@@ -234,7 +234,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
         const announcement = await copyImageToClipboard(image, blob, settings.format, locale);
         showToast(announcement);
       } catch {
-        showPreview({ ...previewOptions, initialFeedback: { message: t(locale, 'copyFallback'), error: true } });
+        showPreview({ ...previewOptions, initialCopyFailure: true });
       }
     } else {
       downloadBlob(blob, filename);
@@ -267,7 +267,7 @@ async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, local
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'imageEncodeFailed'))), mime, .94));
 }
 
-function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, filename, retry, initialFeedback }: {
+function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, filename, retry, initialCopyFailure }: {
   image: HTMLImageElement;
   blob: Blob;
   format: CaptureFormat;
@@ -278,7 +278,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   locale: UiLocale;
   filename: string;
   retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; clip: CaptureClip };
-  initialFeedback?: { message: string; error: boolean };
+  initialCopyFailure?: boolean;
 }) {
   removeExtensionUi();
   const host = createHost('preview');
@@ -295,6 +295,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   shadow.innerHTML = `
     ${sharedStyles()}
     <style>${previewStyles()}</style>
+    <style>${previewInteractionStyles()}</style>
     <aside class="preview-card${hasResourceWarning ? ' has-resource-warning' : ''}" role="dialog" aria-label="${previewTitle}">
       <div class="preview-head">
         <div><span class="status-dot">${hasResourceWarning ? '!' : '✓'}</span><strong class="preview-title">${previewTitle}</strong></div>
@@ -314,15 +315,30 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
         <button class="copy" type="button">${t(locale, 'copyImage')}</button>
         <button class="download" type="button">${t(locale, 'downloadFormat', { format: extension.toUpperCase() })}</button>
       </div>
-      <p class="feedback" role="status"></p>
-      <span class="copy-status" aria-live="polite" aria-atomic="true"></span>
+      <span class="action-status" aria-live="polite" aria-atomic="true"></span>
     </aside>`;
 
   let retryToken: string | null = null;
-  let copyResetTimer: number | null = null;
+  const resetTimers = new Map<HTMLButtonElement, number>();
+  const actionStatus = shadow.querySelector<HTMLElement>('.action-status')!;
+  const showButtonState = (button: HTMLButtonElement, text: string, state: 'success' | 'error', resetText: string, announcement = text) => {
+    const currentTimer = resetTimers.get(button);
+    if (currentTimer !== undefined) window.clearTimeout(currentTimer);
+    button.classList.toggle('is-success', state === 'success');
+    button.classList.toggle('is-error', state === 'error');
+    button.textContent = text;
+    actionStatus.textContent = announcement;
+    const timer = window.setTimeout(() => {
+      button.classList.remove('is-success', 'is-error');
+      button.textContent = resetText;
+      if (actionStatus.textContent === announcement) actionStatus.textContent = '';
+      resetTimers.delete(button);
+    }, 1800);
+    resetTimers.set(button, timer);
+  };
   const cleanup = () => {
     if (retryToken) void chrome.runtime.sendMessage({ type: 'DOMSHOT_CANCEL_IMAGE_PERMISSION', token: retryToken } satisfies ExtensionMessage).catch(() => {});
-    if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
+    resetTimers.forEach((timer) => window.clearTimeout(timer));
     URL.revokeObjectURL(url);
     window.removeEventListener('message', onPermissionMessage);
     removeHost(host);
@@ -352,6 +368,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
     pendingCaptureRetries.set(retryToken, { ...retry, expires: Date.now() + 10 * 60 * 1000 });
     grantButton.disabled = true;
     grantButton.textContent = t(locale, 'preparingPermission');
+    let failed = false;
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'DOMSHOT_PREPARE_IMAGE_PERMISSION',
@@ -367,49 +384,45 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
       permissionPanel.hidden = false;
       permissionFrame.src = response.frameUrl;
     } catch {
-      feedback(shadow, t(locale, 'permissionLoadFailed'), true);
+      failed = true;
+      showButtonState(grantButton, t(locale, 'permissionFailed'), 'error', authorizeOrigins, t(locale, 'permissionLoadFailed'));
     } finally {
       grantButton.disabled = false;
-      grantButton.textContent = authorizeOrigins;
+      if (!failed) grantButton.textContent = authorizeOrigins;
     }
   });
-  shadow.querySelector('.open-permission-window')!.addEventListener('click', async () => {
+  const openPermissionButton = shadow.querySelector<HTMLButtonElement>('.open-permission-window')!;
+  const openPermissionLabel = openPermissionButton.textContent || t(locale, 'openStandalone');
+  openPermissionButton.addEventListener('click', async () => {
     if (!retryToken) return;
     const response = await chrome.runtime.sendMessage({ type: 'DOMSHOT_OPEN_IMAGE_PERMISSION', token: retryToken } satisfies ExtensionMessage) as { opened?: boolean } | undefined;
-    if (!response?.opened) feedback(shadow, t(locale, 'permissionWindowFailed'), true);
-  });
-  shadow.querySelector('.download')!.addEventListener('click', () => {
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    feedback(shadow, t(locale, 'downloadStarted'));
+    if (!response?.opened) showButtonState(openPermissionButton, t(locale, 'openFailed'), 'error', openPermissionLabel, t(locale, 'permissionWindowFailed'));
   });
   const copyButton = shadow.querySelector<HTMLButtonElement>('.copy')!;
-  const copyStatus = shadow.querySelector<HTMLElement>('.copy-status')!;
-  const resetCopyButton = () => {
-    copyButton.classList.remove('is-success');
-    copyButton.textContent = t(locale, 'copyImage');
-    copyStatus.textContent = '';
-    copyResetTimer = null;
-  };
+  const copyLabel = t(locale, 'copyImage');
+  const downloadButton = shadow.querySelector<HTMLButtonElement>('.download')!;
+  const downloadLabel = t(locale, 'downloadFormat', { format: extension.toUpperCase() });
+  downloadButton.addEventListener('click', () => {
+    try {
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      showButtonState(downloadButton, t(locale, 'downloaded'), 'success', downloadLabel, t(locale, 'downloadStarted'));
+    } catch {
+      showButtonState(downloadButton, t(locale, 'downloadFailed'), 'error', downloadLabel);
+    }
+  });
   copyButton.addEventListener('click', async () => {
     try {
       const announcement = await copyImageToClipboard(image, blob, format, locale);
-      if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
-      feedback(shadow, '');
-      copyButton.classList.add('is-success');
-      copyButton.textContent = t(locale, 'copied');
-      copyStatus.textContent = announcement;
-      copyResetTimer = window.setTimeout(resetCopyButton, 1800);
+      showButtonState(copyButton, t(locale, 'copied'), 'success', copyLabel, announcement);
     } catch {
-      if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
-      resetCopyButton();
-      feedback(shadow, t(locale, 'clipboardDenied'), true);
+      showButtonState(copyButton, t(locale, 'copyFailed'), 'error', copyLabel, t(locale, 'clipboardDenied'));
     }
   });
   document.documentElement.appendChild(host);
-  if (initialFeedback) feedback(shadow, initialFeedback.message, initialFeedback.error);
+  if (initialCopyFailure) showButtonState(copyButton, t(locale, 'copyFailed'), 'error', copyLabel, t(locale, 'copyFallback'));
 }
 
 async function copyImageToClipboard(image: HTMLImageElement, blob: Blob, format: CaptureFormat, locale: UiLocale): Promise<string> {
@@ -620,12 +633,6 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]!);
 }
 
-function feedback(shadow: ShadowRoot, message: string, error = false) {
-  const element = shadow.querySelector<HTMLElement>('.feedback')!;
-  element.textContent = message;
-  element.classList.toggle('is-error', error);
-}
-
 function sharedStyles() {
   return `<style>:host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;font-family:${UI_FONT};color:#0f172a}*{box-sizing:border-box}button{font:inherit}button:focus-visible{outline:3px solid rgba(37,99,235,.35);outline-offset:2px}</style>`;
 }
@@ -643,6 +650,18 @@ function selectorMarkup(locale: UiLocale) {
 function previewStyles() {
   return `
     :host{position:fixed;inset:auto;left:var(--domshot-viewport-left,0);top:var(--domshot-viewport-top,0);display:flex;box-sizing:border-box;width:var(--domshot-viewport-width,100vw);height:var(--domshot-viewport-height,100vh);align-items:flex-end;justify-content:flex-end;padding:calc(18px * var(--domshot-ui-scale,1))}.preview-card{width:336px;flex:none;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);transform:scale(var(--domshot-ui-scale,1));transform-origin:right bottom;pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.status-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.has-resource-warning .status-dot{background:#f59e0b}.is-authorizing .status-dot{background:linear-gradient(135deg,#2563eb,#8b5cf6)}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.resource-warning{display:grid;gap:7px;margin:8px 0 0;padding:8px 10px;border:1px solid #fde68a;border-radius:9px;color:#92400e;background:#fffbeb;font-size:10px;line-height:1.45}.grant-images{min-height:31px;border:1px solid #f3c44e;border-radius:8px;color:#78350f;background:#fff;font-size:9px;font-weight:800;cursor:pointer}.grant-images:hover{border-color:#d79b16;background:#fffcf2}.grant-images:disabled{cursor:wait;opacity:.65}.permission-panel{display:grid;gap:5px}.permission-panel[hidden]{display:none}.permission-panel iframe{display:block;width:100%;height:292px;border:0;border-radius:12px;background:#f8fafc}.open-permission-window{min-height:25px;border:0;color:#64748b;background:transparent;font-size:8px;cursor:pointer}.open-permission-window:hover{color:#2563eb;text-decoration:underline;text-underline-offset:2px}.is-authorizing .image-stage,.is-authorizing .resource-warning,.is-authorizing .meta,.is-authorizing .preview-actions,.is-authorizing .feedback{display:none}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .copy.is-success{border-color:#86efac;color:#047857;background:#ecfdf5}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}.copy-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
+}
+
+function previewInteractionStyles() {
+  return `
+    .preview-actions button{transition:border-color .15s ease,background-color .15s ease,color .15s ease,box-shadow .15s ease,filter .15s ease}
+    .preview-actions button:hover{transform:none;border-color:#b7c9f7;box-shadow:0 7px 18px rgba(37,99,235,.1)}
+    .preview-actions .download:not(.is-success):not(.is-error):hover{filter:brightness(.9) saturate(1.08);box-shadow:0 8px 20px rgba(37,99,235,.22)}
+    .preview-actions button.is-success{border-color:#86efac;color:#047857;background:#ecfdf5}
+    .preview-actions button.is-error{border-color:#fecaca;color:#b91c1c;background:#fff1f2}
+    .action-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+    @media(prefers-reduced-motion:reduce){.preview-actions button{transition:none}}
+  `;
 }
 
 function toastStyles() {
