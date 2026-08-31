@@ -29,7 +29,8 @@
         <section class="output-settings" aria-labelledby="output-title">
           <div class="section-heading"><h2 id="output-title" data-i18n="outputSettings">Output</h2><span id="pixelHint">Current 2×</span></div>
           <div class="setting-row"><span data-i18n="imageFormat">Image format</span><div class="segment" role="radiogroup" aria-label="Image format" data-i18n-aria-label="imageFormat"><label><input type="radio" name="format" value="png" checked /><span>PNG</span></label><label><input type="radio" name="format" value="jpg" /><span>JPG</span></label><label><input type="radio" name="format" value="webp" /><span>WebP</span></label></div></div>
-          <div class="setting-row"><span data-i18n="imageClarity">Image quality</span><div class="segment scale-segment" role="radiogroup" aria-label="Image quality" data-i18n-aria-label="imageClarity"><label><input type="radio" name="scale" value="1" /><span>1×</span></label><label><input type="radio" name="scale" value="2" checked /><span>2×</span></label><label><input type="radio" name="scale" value="3" /><span>3×</span></label></div></div>
+          <div class="setting-row"><span data-i18n="imageClarity">Resolution</span><div class="segment scale-segment" role="radiogroup" aria-label="Resolution" data-i18n-aria-label="imageClarity"><label><input type="radio" name="scale" value="1" /><span>1×</span></label><label><input type="radio" name="scale" value="2" checked /><span>2×</span></label><label><input type="radio" name="scale" value="3" /><span>3×</span></label></div></div>
+          <div class="setting-row" id="qualityRow" hidden><span data-i18n="lossyQuality">File quality</span><div class="segment quality-segment" role="radiogroup" aria-label="File quality" data-i18n-aria-label="lossyQuality"><label><input type="radio" name="quality" value="0.8" aria-label="Compact quality, 80%" data-i18n-aria-label="compactQualityLabel" /><span><strong data-i18n="compactQuality">Compact</strong><small>80%</small></span></label><label><input type="radio" name="quality" value="0.92" aria-label="Standard quality, 92%" data-i18n-aria-label="standardQualityLabel" checked /><span><strong data-i18n="standardQuality">Standard</strong><small>92%</small></span></label><label><input type="radio" name="quality" value="1" aria-label="Maximum quality, 100%" data-i18n-aria-label="maximumQualityLabel" /><span><strong data-i18n="maximumQuality">Max</strong><small>100%</small></span></label></div></div>
         </section>
 
       </section>
@@ -42,10 +43,12 @@
           <h1 id="settings-title" data-i18n="settings">Settings</h1>
         </header>
 
+        <div class="settings-content">
         <section class="settings-group general-settings" aria-labelledby="general-title">
           <div class="advanced-heading"><h2 id="general-title" data-i18n="generalSettings">General</h2></div>
           <div class="setting-row language-row"><span data-i18n="language">Language</span><div class="segment language-segment" role="radiogroup" aria-label="Language" data-i18n-aria-label="language"><label><input type="radio" name="language" value="auto" checked /><span data-i18n="followBrowser">Auto</span></label><label><input type="radio" name="language" value="zh-CN" /><span data-i18n="chinese">中文</span></label><label><input type="radio" name="language" value="en" /><span data-i18n="english">English</span></label></div></div>
           <div class="setting-row"><span data-i18n="afterCapture">After capture</span><div class="segment after-capture-segment" role="radiogroup" aria-label="After capture" data-i18n-aria-label="afterCapture"><label><input type="radio" name="afterCapture" value="preview" checked /><span data-i18n="showPreview">Preview</span></label><label><input type="radio" name="afterCapture" value="copy" /><span data-i18n="autoCopy">Copy</span></label><label><input type="radio" name="afterCapture" value="download" /><span data-i18n="autoDownload">Download</span></label></div></div>
+          <div class="filename-setting"><div class="setting-row"><span data-i18n="filenameMode">File names</span><div class="segment filename-segment" role="radiogroup" aria-label="File names" data-i18n-aria-label="filenameMode"><label><input type="radio" name="filenameMode" value="smart" checked /><span data-i18n="smartFilename">Smart</span></label><label><input type="radio" name="filenameMode" value="page-title" /><span data-i18n="pageTitleFilename">Page title</span></label><label><input type="radio" name="filenameMode" value="timestamp" /><span data-i18n="timestampFilename">Timestamp</span></label></div></div><p class="setting-hint" id="filenameHint" data-i18n="smartFilenameDesc">Full pages use the page title; elements use their label.</p></div>
         </section>
 
         <section class="settings-group advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
@@ -56,7 +59,9 @@
             <label class="toggle-row"><span><strong data-i18n="outerShadows">Keep outer shadows</strong><small data-i18n="outerShadowsDesc">Includes shadows and outlines around the root element</small></span><input id="outerShadows" type="checkbox" /><i aria-hidden="true"></i></label>
             <label class="toggle-row"><span><strong data-i18n="compressImages">Optimize embedded images</strong><small data-i18n="compressImagesDesc">Downsamples images to their displayed size</small></span><input id="compressImages" type="checkbox" checked /><i aria-hidden="true"></i></label>
           </div>
+          <div class="setting-row advanced-choice-row"><span data-i18n="captureDelay">Capture delay</span><div class="segment delay-segment" role="radiogroup" aria-label="Capture delay" data-i18n-aria-label="captureDelay"><label><input type="radio" name="captureDelay" value="0" checked /><span data-i18n="noDelay">None</span></label><label><input type="radio" name="captureDelay" value="500" /><span data-i18n="halfSecond">0.5s</span></label><label><input type="radio" name="captureDelay" value="1000" /><span data-i18n="oneSecond">1s</span></label><label><input type="radio" name="captureDelay" value="2000" /><span data-i18n="twoSeconds">2s</span></label></div></div>
         </section>
+        </div>
       </section>
 
       <footer class="popup-footer">

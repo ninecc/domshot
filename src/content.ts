@@ -176,6 +176,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
   const progress = showProgress(label, locale);
   const imageResources = createImageResourceTracker();
   try {
+    if (settings.captureDelay > 0) await new Promise((resolve) => window.setTimeout(resolve, settings.captureDelay));
     const result = await snapdom(target, {
       scale: settings.scale,
       dpr: 1,
@@ -188,8 +189,9 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       plugins: [imageResources.plugin],
     });
 
-    const image = await exportImage(result, settings.format);
+    const image = await exportImage(result, settings.format, settings.quality);
     const blob = await imageToBlob(image, settings.format, locale);
+    const filename = captureFilename(settings.filenameMode, label, settings.format, target === document.documentElement);
     progress.remove();
     const previewOptions = {
       image,
@@ -200,6 +202,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       failedImageCount: imageResources.failedCount(),
       failedImageUrls: imageResources.failedUrls(),
       locale,
+      filename,
       retry: { target, settings, label, locale },
     };
     if (imageResources.failedCount() > 0 || settings.afterCapture === 'preview') {
@@ -212,7 +215,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
         showPreview({ ...previewOptions, initialFeedback: { message: t(locale, 'copyFallback'), error: true } });
       }
     } else {
-      downloadBlob(blob, settings.format, label);
+      downloadBlob(blob, filename);
       showToast(t(locale, 'downloadStarted'));
     }
   } catch (error) {
@@ -223,9 +226,9 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
 
 type SnapResult = Awaited<ReturnType<typeof snapdom>>;
 
-async function exportImage(result: SnapResult, format: CaptureFormat): Promise<HTMLImageElement> {
-  if (format === 'jpg') return result.toJpg();
-  if (format === 'webp') return result.toWebp();
+async function exportImage(result: SnapResult, format: CaptureFormat, quality: number): Promise<HTMLImageElement> {
+  if (format === 'jpg') return result.toJpg({ quality });
+  if (format === 'webp') return result.toWebp({ quality });
   return result.toPng();
 }
 
@@ -242,7 +245,7 @@ async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, local
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'imageEncodeFailed'))), mime, .94));
 }
 
-function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, retry, initialFeedback }: {
+function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, filename, retry, initialFeedback }: {
   image: HTMLImageElement;
   blob: Blob;
   format: CaptureFormat;
@@ -251,6 +254,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   failedImageCount: number;
   failedImageUrls: string[];
   locale: UiLocale;
+  filename: string;
   retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale };
   initialFeedback?: { message: string; error: boolean };
 }) {
@@ -355,7 +359,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   shadow.querySelector('.download')!.addEventListener('click', () => {
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `domshot-${safeFilename(label)}-${timestamp()}.${extension}`;
+    anchor.download = filename;
     anchor.click();
     feedback(shadow, t(locale, 'downloadStarted'));
   });
@@ -392,13 +396,21 @@ async function copyImageToClipboard(image: HTMLImageElement, blob: Blob, format:
   return t(locale, format === 'png' ? 'imageCopied' : 'convertedCopied');
 }
 
-function downloadBlob(blob: Blob, format: CaptureFormat, label: string) {
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `domshot-${safeFilename(label)}-${timestamp()}.${format}`;
+  anchor.download = filename;
   anchor.click();
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function captureFilename(mode: CaptureSettings['filenameMode'], label: string, format: CaptureFormat, fullPage: boolean): string {
+  const stamp = timestamp();
+  if (mode === 'timestamp') return `domshot-${stamp}.${format}`;
+  const pageTitle = document.title.trim();
+  const source = mode === 'page-title' || fullPage ? pageTitle || label : label;
+  return `domshot-${safeFilename(source)}-${stamp}.${format}`;
 }
 
 async function toPngBlob(image: HTMLImageElement, locale: UiLocale): Promise<Blob> {
@@ -568,7 +580,7 @@ function imageOrigins(urls: string[]) {
 }
 
 function safeFilename(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/gi, '-').replace(/^-|-$/g, '').slice(0, 36) || 'capture';
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 36) || 'capture';
 }
 
 function timestamp() {

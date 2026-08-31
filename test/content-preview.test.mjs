@@ -49,10 +49,10 @@ test('content preview remains stable across script updates and zoom changes', as
       await page.waitUntil(`globalThis.__domshotCopiedItems?.length === 1`, 'Automatic copy did not write the image');
       assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi`), 'toast');
 
-      await page.evaluate(`HTMLAnchorElement.prototype.click = function () { globalThis.__domshotDownload = this.download; }`);
-      await requestFullPage(page, { afterCapture: 'download' });
+      await page.evaluate(`document.title = 'Résumé 日本語'; HTMLAnchorElement.prototype.click = function () { globalThis.__domshotDownload = this.download; }`);
+      await requestFullPage(page, { afterCapture: 'download', filenameMode: 'page-title' });
       await page.waitUntil(`Boolean(globalThis.__domshotDownload)`, 'Automatic download did not start');
-      assert.match(await page.evaluate(`globalThis.__domshotDownload`), /^domshot-.+\.png$/);
+      assert.match(await page.evaluate(`globalThis.__domshotDownload`), /^domshot-résumé-日本語-\d{14}\.png$/u);
 
       await page.evaluate(`Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async write() { throw new Error('denied'); } } })`);
       await requestFullPage(page, { afterCapture: 'copy' });
@@ -60,6 +60,23 @@ test('content preview remains stable across script updates and zoom changes', as
         const host = document.querySelector('#domshot-extension-root');
         return host?.dataset.domshotUi === 'preview' && host.shadowRoot.querySelector('.feedback.is-error')?.textContent.length > 0;
       })()`, 'Failed automatic copy did not fall back to the preview');
+    });
+
+    await context.test('applies lossy quality and waits before capture when configured', async () => {
+      await requestFullPage(page, { format: 'jpg', quality: 0.8 });
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Low-quality JPG preview did not appear');
+      const lowQualitySize = await page.evaluate(`fetch(document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.image-stage img').src).then((response) => response.blob()).then((blob) => blob.size)`);
+
+      await requestFullPage(page, { format: 'jpg', quality: 1 });
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Maximum-quality JPG preview did not appear');
+      const maximumQualitySize = await page.evaluate(`fetch(document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.image-stage img').src).then((response) => response.blob()).then((blob) => blob.size)`);
+      assert.ok(maximumQualitySize >= lowQualitySize, `maximum-quality JPG (${maximumQualitySize}) was smaller than 80% JPG (${lowQualitySize})`);
+
+      const startedAt = Date.now();
+      await requestFullPage(page, { captureDelay: 500 });
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi`), 'progress');
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Delayed capture preview did not appear');
+      assert.ok(Date.now() - startedAt >= 400, 'configured capture delay was not applied');
     });
 
     let baseline;
@@ -279,7 +296,7 @@ async function requestFullPage(page, overrides = {}, locale = 'zh-CN') {
   const { pageZoom = 1, ...settings } = overrides;
   await page.evaluate(`globalThis.__domshotListener({
     type: 'DOMSHOT_FULL_PAGE',
-    settings: ${JSON.stringify({ format: 'png', scale: 1, afterCapture: 'preview', embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
+    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
     locale: ${JSON.stringify(locale)},
     pageZoom: ${pageZoom}
   }, {}, () => {})`);

@@ -32,6 +32,9 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       actionLabels: [...document.querySelectorAll('.capture-action strong')].map((label) => label.textContent),
       clarityLabel: document.querySelector('.scale-segment').parentElement.firstElementChild.textContent,
       pixelHint: document.querySelector('#pixelHint').textContent,
+      qualityHidden: document.querySelector('#qualityRow').hidden,
+      qualityDisplay: getComputedStyle(document.querySelector('#qualityRow')).display,
+      filenameHint: document.querySelector('#filenameHint').textContent,
       settingsTitle: document.querySelector('#settings-title').textContent,
       generalTitle: document.querySelector('#general-title').textContent
     })`);
@@ -46,6 +49,31 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.ok(initial.actionLabels.every(Boolean));
     assert.ok(initial.clarityLabel.length > 0);
     assert.match(initial.pixelHint, /2×/);
+    assert.equal(initial.qualityHidden, true);
+    assert.equal(initial.qualityDisplay, 'none');
+    assert.ok(initial.filenameHint.length > 0);
+
+    const lossyQuality = await page.evaluate(`(() => {
+      document.querySelector('input[name="format"][value="jpg"]').click();
+      document.querySelector('input[name="quality"][value="0.8"]').click();
+      const result = {
+        visible: getComputedStyle(document.querySelector('#qualityRow')).display !== 'none',
+        quality: globalThis.__syncStore.captureSettings?.quality,
+        labels: [...document.querySelectorAll('.quality-segment strong')].map((item) => item.textContent),
+        percentages: [...document.querySelectorAll('.quality-segment small')].map((item) => item.textContent),
+        stacked: [...document.querySelectorAll('.quality-segment span')].every((item) => item.querySelector(':scope > strong') && item.querySelector(':scope > small')),
+        accessibleLabels: [...document.querySelectorAll('input[name="quality"]')].map((item) => item.getAttribute('aria-label'))
+      };
+      document.querySelector('input[name="format"][value="png"]').click();
+      return result;
+    })()`);
+    assert.equal(lossyQuality.visible, true);
+    assert.equal(lossyQuality.quality, 0.8);
+    assert.ok(lossyQuality.labels.every((label) => !label.includes('%')), 'visible quality choices should use semantic labels');
+    assert.deepEqual(lossyQuality.percentages, ['80%', '92%', '100%']);
+    assert.equal(lossyQuality.stacked, true);
+    assert.deepEqual(lossyQuality.accessibleLabels.map((label) => label.match(/\d+%/)?.[0]), ['80%', '92%', '100%']);
+    assert.equal(await page.evaluate(`getComputedStyle(document.querySelector('#qualityRow')).display`), 'none');
 
     await page.waitUntil(
       `getComputedStyle(document.querySelector('#homePanel')).transform === 'none'`,
@@ -110,9 +138,15 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         settingsTitleVisible: document.querySelector('#settings-title').getClientRects().length > 0,
         backButtonVisible: document.querySelector('#backButton').getClientRects().length > 0,
         autosaveVisible: document.querySelector('.autosave-status').getClientRects().length > 0,
+        settingsContentScrollable: document.querySelector('.settings-content').scrollHeight > document.querySelector('.settings-content').clientHeight,
         languageOptionCount: document.querySelectorAll('input[name="language"]').length,
         afterCaptureOptionCount: document.querySelectorAll('input[name="afterCapture"]').length,
         afterCaptureDefault: document.querySelector('input[name="afterCapture"]:checked').value,
+        filenameOptionCount: document.querySelectorAll('input[name="filenameMode"]').length,
+        filenameDefault: document.querySelector('input[name="filenameMode"]:checked').value,
+        filenameChoicesFit: [...document.querySelectorAll('.filename-segment span')].every((item) => item.scrollWidth <= item.clientWidth),
+        delayOptionCount: document.querySelectorAll('input[name="captureDelay"]').length,
+        delayDefault: document.querySelector('input[name="captureDelay"]:checked').value,
         footerVisible: getComputedStyle(document.querySelector('.popup-footer')).display !== 'none',
         outputSurface: (() => {
           const style = getComputedStyle(document.querySelector('.output-settings'));
@@ -143,10 +177,16 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.settingsTitleVisible, true);
     assert.equal(metrics.backButtonVisible, true);
     assert.equal(metrics.autosaveVisible, true);
+    assert.equal(metrics.settingsContentScrollable, true);
     assert.ok(Math.max(...metrics.localeLayout.descriptionHeights) - Math.min(...metrics.localeLayout.descriptionHeights) < 0.5, 'setting descriptions must reserve comparable text region heights');
     assert.equal(metrics.languageOptionCount, 3);
     assert.equal(metrics.afterCaptureOptionCount, 3);
     assert.equal(metrics.afterCaptureDefault, 'preview');
+    assert.equal(metrics.filenameOptionCount, 3);
+    assert.equal(metrics.filenameDefault, 'smart');
+    assert.equal(metrics.filenameChoicesFit, true);
+    assert.equal(metrics.delayOptionCount, 4);
+    assert.equal(metrics.delayDefault, '0');
     assert.deepEqual(metrics.implicitLineHeights.filter(({ lineHeight }) => lineHeight === 'normal'), [], 'localized text must not rely on font-dependent normal line height');
     assert.equal(metrics.footerVisible, true, 'shared footer must remain visible on the settings panel');
     assert.equal(metrics.advancedSurface.backgroundImage, 'none', 'settings containers must not use decorative gradients');
@@ -167,6 +207,18 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.ok(metrics.scrollWidth <= 360, `expanded popup is ${metrics.scrollWidth}px wide`);
     assert.ok(metrics.scrollHeight <= 600, `expanded popup is ${metrics.scrollHeight}px tall and requires a scrollbar`);
     assert.ok(metrics.localeLayout.shellHeight <= 600, `settings content is ${metrics.localeLayout.shellHeight}px tall`);
+
+    const fixedChrome = await page.evaluate(`(() => {
+      const content = document.querySelector('.settings-content');
+      const header = document.querySelector('.settings-header');
+      const footer = document.querySelector('.popup-footer');
+      const before = { headerTop: header.getBoundingClientRect().top, footerTop: footer.getBoundingClientRect().top };
+      content.scrollTop = content.scrollHeight;
+      const after = { headerTop: header.getBoundingClientRect().top, footerTop: footer.getBoundingClientRect().top };
+      return { before, after, scrollTop: content.scrollTop };
+    })()`);
+    assert.ok(fixedChrome.scrollTop > 0);
+    assertLayoutsClose(fixedChrome.after, fixedChrome.before);
 
     const chinese = await page.evaluate(`(() => {
       document.querySelector('input[name="language"][value="zh-CN"]').click();
@@ -211,12 +263,20 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     const savedAdvancedSettings = await page.evaluate(`(() => {
       document.querySelector('#outerShadows').click();
       document.querySelector('#compressImages').click();
+      document.querySelector('input[name="filenameMode"][value="timestamp"]').click();
+      document.querySelector('input[name="captureDelay"][value="500"]').click();
       return {
         outerShadows: globalThis.__syncStore.captureSettings?.outerShadows,
-        compress: globalThis.__syncStore.captureSettings?.compress
+        compress: globalThis.__syncStore.captureSettings?.compress,
+        filenameMode: globalThis.__syncStore.captureSettings?.filenameMode,
+        captureDelay: globalThis.__syncStore.captureSettings?.captureDelay,
+        filenameHint: document.querySelector('#filenameHint').textContent
       };
     })()`);
-    assert.deepEqual(savedAdvancedSettings, { outerShadows: true, compress: false });
+    const { filenameHint: savedFilenameHint, ...savedPreferences } = savedAdvancedSettings;
+    assert.deepEqual(savedPreferences, { outerShadows: true, compress: false, filenameMode: 'timestamp', captureDelay: 500 });
+    assert.ok(savedFilenameHint.length > 0);
+    assert.notEqual(savedFilenameHint, initial.filenameHint);
 
     const toggleCloseStart = await page.evaluate(`(() => {
       const input = document.querySelector('#embedFonts');

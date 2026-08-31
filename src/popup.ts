@@ -6,6 +6,8 @@ import './popup.css';
 
 const status = document.querySelector<HTMLElement>('#status')!;
 const pixelHint = document.querySelector<HTMLElement>('#pixelHint')!;
+const qualityRow = document.querySelector<HTMLElement>('#qualityRow')!;
+const filenameHint = document.querySelector<HTMLElement>('#filenameHint')!;
 const selectButton = document.querySelector<HTMLButtonElement>('#selectElement')!;
 const pageButton = document.querySelector<HTMLButtonElement>('#capturePage')!;
 const embedFonts = document.querySelector<HTMLInputElement>('#embedFonts')!;
@@ -26,7 +28,10 @@ function readSettings(): CaptureSettings {
   return {
     format: chosen<CaptureSettings['format']>('format'),
     scale: Number(chosen('scale')) as CaptureSettings['scale'],
+    quality: Number(chosen('quality')) as CaptureSettings['quality'],
     afterCapture: chosen<CaptureSettings['afterCapture']>('afterCapture'),
+    filenameMode: chosen<CaptureSettings['filenameMode']>('filenameMode'),
+    captureDelay: Number(chosen('captureDelay')) as CaptureSettings['captureDelay'],
     embedFonts: embedFonts.checked,
     reconcile: reconcile.checked,
     outerShadows: outerShadows.checked,
@@ -41,15 +46,32 @@ function readLanguagePreference(): LanguagePreference {
 function applySettings(settings: CaptureSettings) {
   const format = document.querySelector<HTMLInputElement>(`input[name="format"][value="${settings.format}"]`);
   const scale = document.querySelector<HTMLInputElement>(`input[name="scale"][value="${settings.scale}"]`);
+  const quality = document.querySelector<HTMLInputElement>(`input[name="quality"][value="${settings.quality}"]`);
   const afterCapture = document.querySelector<HTMLInputElement>(`input[name="afterCapture"][value="${settings.afterCapture}"]`);
+  const filenameMode = document.querySelector<HTMLInputElement>(`input[name="filenameMode"][value="${settings.filenameMode}"]`);
+  const captureDelay = document.querySelector<HTMLInputElement>(`input[name="captureDelay"][value="${settings.captureDelay}"]`);
   if (format) format.checked = true;
   if (scale) scale.checked = true;
+  if (quality) quality.checked = true;
   if (afterCapture) afterCapture.checked = true;
+  if (filenameMode) filenameMode.checked = true;
+  if (captureDelay) captureDelay.checked = true;
   embedFonts.checked = settings.embedFonts;
   reconcile.checked = settings.reconcile;
   outerShadows.checked = settings.outerShadows;
   compressImages.checked = settings.compress;
   pixelHint.textContent = t(activeLocale, 'currentScale', { scale: settings.scale });
+  updateFormatDependentSettings(settings.format);
+  updateFilenameHint(settings.filenameMode);
+}
+
+function updateFormatDependentSettings(format: CaptureSettings['format']) {
+  qualityRow.hidden = format === 'png';
+}
+
+function updateFilenameHint(mode: CaptureSettings['filenameMode']) {
+  const key = mode === 'page-title' ? 'pageTitleFilenameDesc' : mode === 'timestamp' ? 'timestampFilenameDesc' : 'smartFilenameDesc';
+  filenameHint.textContent = t(activeLocale, key);
 }
 
 function applyLanguagePreference(preference: LanguagePreference) {
@@ -58,6 +80,7 @@ function applyLanguagePreference(preference: LanguagePreference) {
   activeLocale = resolveLocale(preference);
   localizeDocument(activeLocale);
   pixelHint.textContent = t(activeLocale, 'currentScale', { scale: readSettings().scale });
+  updateFilenameHint(readSettings().filenameMode);
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
@@ -103,6 +126,8 @@ document.querySelectorAll<HTMLInputElement>('input:not([name="language"])').forE
   input.addEventListener('change', async () => {
     const settings = readSettings();
     pixelHint.textContent = t(activeLocale, 'currentScale', { scale: settings.scale });
+    updateFormatDependentSettings(settings.format);
+    updateFilenameHint(settings.filenameMode);
     await chrome.storage.sync.set({ captureSettings: settings });
   });
 });

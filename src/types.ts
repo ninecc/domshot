@@ -1,19 +1,25 @@
 export type CaptureFormat = 'png' | 'jpg' | 'webp';
 export type PostCaptureAction = 'preview' | 'copy' | 'download';
+export type ImageQuality = 0.8 | 0.92 | 1;
+export type CaptureDelay = 0 | 500 | 1000 | 2000;
+export type FilenameMode = 'smart' | 'page-title' | 'timestamp';
 export type UiLocale = 'en' | 'zh-CN';
 export type LanguagePreference = 'auto' | UiLocale;
 
 export interface CaptureSettings {
   format: CaptureFormat;
   scale: 1 | 2 | 3;
+  quality: ImageQuality;
   afterCapture: PostCaptureAction;
+  filenameMode: FilenameMode;
+  captureDelay: CaptureDelay;
   embedFonts: boolean;
   reconcile: boolean;
   outerShadows: boolean;
   compress: boolean;
 }
 
-export const CONTENT_SCRIPT_PROTOCOL = 5;
+export const CONTENT_SCRIPT_PROTOCOL = 6;
 
 export interface ResolvedImageResource {
   url: string;
@@ -37,7 +43,10 @@ export type ExtensionMessage =
 export const DEFAULT_SETTINGS: CaptureSettings = {
   format: 'png',
   scale: 2,
+  quality: 0.92,
   afterCapture: 'preview',
+  filenameMode: 'smart',
+  captureDelay: 0,
   embedFonts: true,
   reconcile: false,
   outerShadows: false,
