@@ -9,6 +9,7 @@ DOMShot is a Chrome Manifest V3 extension for capturing individual DOM elements 
 ## Features
 
 - Highlight and inspect elements before capturing them.
+- Capture exactly what is visible in the current viewport.
 - Capture one element or the complete page DOM.
 - Export PNG, JPG, or WebP at 1×, 2×, or 3× scale.
 - Preview, copy, and download images without leaving the page.
@@ -26,7 +27,7 @@ npm run build
 
 Open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the generated `dist` directory.
 
-Open DOMShot on a regular web page, choose **Capture element** or **Capture full page**, then copy or download the result from the in-page preview. Press `Esc` to leave element selection.
+Open DOMShot on a regular web page, choose **Capture element**, **Capture visible area**, or **Capture full page**, then copy or download the result from the in-page preview. Press `Esc` to leave element selection.
 
 ## Settings
 
