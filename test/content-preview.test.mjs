@@ -34,6 +34,22 @@ test('content preview remains stable across script updates and zoom changes', as
       assert.doesNotMatch(`${labels.title} ${labels.copy}`, /[\u4e00-\u9fff]/, 'English capture controls should not contain Chinese copy');
     });
 
+    await context.test('applies the requested theme to in-page UI', async () => {
+      await capturePage(page, 1, 'en', 'light');
+      const light = await page.evaluate(`(() => {
+        const host = document.querySelector('#domshot-extension-root');
+        return { theme: host.dataset.domshotTheme, background: getComputedStyle(host.shadowRoot.querySelector('.preview-card')).backgroundColor };
+      })()`);
+      await capturePage(page, 1, 'en', 'dark');
+      const dark = await page.evaluate(`(() => {
+        const host = document.querySelector('#domshot-extension-root');
+        return { theme: host.dataset.domshotTheme, background: getComputedStyle(host.shadowRoot.querySelector('.preview-card')).backgroundColor };
+      })()`);
+      assert.equal(light.theme, 'light');
+      assert.equal(dark.theme, 'dark');
+      assert.notEqual(dark.background, light.background);
+    });
+
     await context.test('captures only the current visible viewport', async () => {
       await page.setPageScale(1);
       await page.evaluate('scrollTo(0, 400)');
@@ -159,8 +175,46 @@ test('content preview remains stable across script updates and zoom changes', as
           value: class ClipboardItem { constructor(items) { this.items = items; } }
         });
       })()`);
-      await capturePage(page, 1);
+      await capturePage(page, 1, 'zh-CN', 'dark');
       const beforeHeight = await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card').getBoundingClientRect().height`);
+
+      const closeBefore = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.close');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { hasSvg: Boolean(button.querySelector('svg')), color: style.color, backgroundColor: style.backgroundColor, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      await page.moveMouse(closeBefore.rect.left + closeBefore.rect.width / 2, closeBefore.rect.top + closeBefore.rect.height / 2);
+      await page.nextFrames();
+      const closeHovered = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.close');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { color: style.color, backgroundColor: style.backgroundColor, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      assert.equal(closeBefore.hasSvg, true);
+      assert.notEqual(closeHovered.color, closeBefore.color);
+      assert.equal(closeHovered.backgroundColor, closeBefore.backgroundColor);
+      assert.deepEqual(closeHovered.rect, closeBefore.rect);
+
+      const copyBefore = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { borderColor: style.borderColor, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      await page.moveMouse(copyBefore.rect.left + copyBefore.rect.width / 2, copyBefore.rect.top + copyBefore.rect.height / 2);
+      await page.nextFrames();
+      const copyHovered = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { transform: style.transform, borderColor: style.borderColor, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      assert.equal(copyHovered.transform, 'none');
+      assert.deepEqual(copyHovered.rect, copyBefore.rect);
+      assert.notEqual(copyHovered.borderColor, copyBefore.borderColor);
+
       await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy').click()`);
       await page.waitUntil(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy').classList.contains('is-success')`, 'Copy button did not show success');
       const result = await page.evaluate(`(() => {
@@ -184,7 +238,8 @@ test('content preview remains stable across script updates and zoom changes', as
         const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
         const button = shadow.querySelector('.download');
         const rect = button.getBoundingClientRect();
-        return { cardHeight: shadow.querySelector('.preview-card').getBoundingClientRect().height, filter: getComputedStyle(button).filter, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+        const style = getComputedStyle(button);
+        return { cardHeight: shadow.querySelector('.preview-card').getBoundingClientRect().height, filter: style.filter, borderColor: style.borderColor, borderWidth: style.borderWidth, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
       })()`);
       await page.moveMouse(downloadBefore.rect.left + downloadBefore.rect.width / 2, downloadBefore.rect.top + downloadBefore.rect.height / 2);
       await page.nextFrames();
@@ -192,10 +247,13 @@ test('content preview remains stable across script updates and zoom changes', as
         const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.download');
         const rect = button.getBoundingClientRect();
         const style = getComputedStyle(button);
-        return { transform: style.transform, filter: style.filter, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+        return { transform: style.transform, filter: style.filter, borderColor: style.borderColor, borderWidth: style.borderWidth, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
       })()`);
       assert.equal(downloadHovered.transform, 'none');
       assert.deepEqual(downloadHovered.rect, downloadBefore.rect);
+      assert.equal(downloadBefore.borderWidth, '1px');
+      assert.equal(downloadHovered.borderWidth, downloadBefore.borderWidth);
+      assert.notEqual(downloadHovered.borderColor, downloadBefore.borderColor);
       assert.notEqual(downloadHovered.filter, downloadBefore.filter, 'download hover should visibly change the primary surface');
 
       await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.download').click()`);
@@ -263,6 +321,7 @@ test('selected element reports cross-origin images that could not be embedded', 
         type: 'DOMSHOT_SELECT',
         settings: { format: 'png', scale: 1, afterCapture: 'download', embedFonts: false, reconcile: false, outerShadows: false, compress: true },
         locale: 'zh-CN',
+        theme: 'light',
         pageZoom: 1
       }, {}, () => {})`);
       await page.evaluate(`(() => {
@@ -290,6 +349,7 @@ test('selected element reports cross-origin images that could not be embedded', 
 
       await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.grant-images').click()`);
       await page.waitUntil(`globalThis.__domshotPermissionRequest?.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION'`, 'Permission request was not prepared');
+      assert.equal(await page.evaluate(`globalThis.__domshotPermissionRequest.theme`), 'light');
       await page.waitUntil(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card').classList.contains('is-authorizing')`, 'Preview card did not enter its inline permission state');
       const authorizationState = await page.evaluate(`(() => {
         const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
@@ -323,29 +383,31 @@ test('selected element reports cross-origin images that could not be embedded', 
   }
 });
 
-async function capturePage(page, pageZoom, locale = 'zh-CN') {
-  await requestFullPage(page, { pageZoom }, locale);
+async function capturePage(page, pageZoom, locale = 'zh-CN', theme = 'light') {
+  await requestFullPage(page, { pageZoom }, locale, theme);
   await page.waitUntil(`(() => {
     const host = document.querySelector('#domshot-extension-root');
     return host?.dataset.domshotUi === 'preview' && Boolean(host.shadowRoot?.querySelector('.preview-card img')?.complete);
   })()`, 'Preview did not become ready');
 }
 
-async function requestFullPage(page, overrides = {}, locale = 'zh-CN') {
+async function requestFullPage(page, overrides = {}, locale = 'zh-CN', theme = 'light') {
   const { pageZoom = 1, ...settings } = overrides;
   await page.evaluate(`globalThis.__domshotListener({
     type: 'DOMSHOT_FULL_PAGE',
     settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
     locale: ${JSON.stringify(locale)},
+    theme: ${JSON.stringify(theme)},
     pageZoom: ${pageZoom}
   }, {}, () => {})`);
 }
 
-async function requestVisibleArea(page, overrides = {}, locale = 'zh-CN') {
+async function requestVisibleArea(page, overrides = {}, locale = 'zh-CN', theme = 'light') {
   await page.evaluate(`globalThis.__domshotListener({
     type: 'DOMSHOT_VISIBLE_AREA',
     settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...overrides })},
     locale: ${JSON.stringify(locale)},
+    theme: ${JSON.stringify(theme)},
     pageZoom: 1
   }, {}, () => {})`);
 }

@@ -45,3 +45,19 @@ html[data-mode="inline"] .privacy-note { display: grid; gap: 2px; margin: 8px 3p
 html[data-mode="inline"] .permission-status { min-height: 34px; margin-top: 4px; }
 html[data-mode="inline"] .permission-actions { grid-template-columns: .75fr 1.45fr; }
 html[data-mode="inline"] .permission-actions button { min-height: 38px; }
+
+:root[data-theme="dark"] { color: #e6edf8; background: #080f1d; color-scheme: dark; }
+:root[data-theme="dark"] body { background: radial-gradient(circle at 88% -6%, rgba(139,92,246,.14), transparent 32%), radial-gradient(circle at 5% 12%, rgba(34,211,238,.09), transparent 30%), #080f1d; }
+:root[data-theme="dark"] .permission-head, :root[data-theme="dark"] .permission-copy > p:last-child, :root[data-theme="dark"] .privacy-note, :root[data-theme="dark"] .permission-status { color: #94a3b8; }
+:root[data-theme="dark"] .permission-mark { border-color: #34528c; color: #60a5fa; background: linear-gradient(145deg,#16233a,#111b2b); box-shadow: 0 8px 22px rgba(0,0,0,.28); }
+:root[data-theme="dark"] .eyebrow { color: #60a5fa; }
+:root[data-theme="dark"] .origin-panel { border-color: #2b3a50; background: rgba(15,23,42,.96); box-shadow: 0 10px 28px rgba(0,0,0,.24); }
+:root[data-theme="dark"] .origin-heading, :root[data-theme="dark"] .origin-panel li { border-color: #26354a; }
+:root[data-theme="dark"] .origin-heading span { color: #a78bfa; }
+:root[data-theme="dark"] .origin-icon { color: #60a5fa; background: #14254a; }
+:root[data-theme="dark"] .origin-panel small, :root[data-theme="dark"] .origin-panel .empty { color: #94a3b8; }
+:root[data-theme="dark"] .privacy-note strong, :root[data-theme="dark"] .permission-status.is-success { color: #34d399; }
+:root[data-theme="dark"] .permission-status.is-declined { color: #fbbf24; }
+:root[data-theme="dark"] .cancel { border-color: #334155; color: #cbd5e1; background: #111b2b; }
+:root[data-theme="dark"] .grant { background: linear-gradient(135deg,#2563eb,#7c3aed); box-shadow: 0 8px 18px rgba(0,0,0,.28); }
+:root[data-theme="dark"][data-mode="inline"], :root[data-theme="dark"][data-mode="inline"] body { background: transparent; }

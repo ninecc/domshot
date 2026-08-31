@@ -11,6 +11,13 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     viewport: { width: 360, height: 600 },
     initScript: `
       globalThis.__syncStore = {};
+      globalThis.__themeMedia = {
+        matches: false,
+        listeners: [],
+        addEventListener(_type, listener) { this.listeners.push(listener); },
+        removeEventListener() {}
+      };
+      Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: () => globalThis.__themeMedia });
       Object.defineProperty(chrome, 'i18n', { configurable: true, value: { getUILanguage: () => 'fr-FR' } });
       Object.defineProperty(chrome, 'storage', { configurable: true, value: { sync: {
         async get(key) { return typeof key === 'string' ? { [key]: globalThis.__syncStore[key] } : { ...globalThis.__syncStore }; },
@@ -23,6 +30,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
 
     const initial = await page.evaluate(`({
       lang: document.documentElement.lang,
+      theme: document.documentElement.dataset.theme,
       homeHidden: document.querySelector('#homePanel').hidden,
       settingsHidden: document.querySelector('#settingsPanel').hidden,
       outputSettingsInHome: Boolean(document.querySelector('#homePanel .output-settings')),
@@ -43,6 +51,17 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       generalTitle: document.querySelector('#general-title').textContent
     })`);
     assert.equal(initial.lang, 'en');
+    assert.equal(initial.theme, 'light');
+
+    const followedSystemTheme = await page.evaluate(`(() => {
+      globalThis.__themeMedia.matches = true;
+      globalThis.__themeMedia.listeners.forEach((listener) => listener({ matches: true }));
+      const dark = document.documentElement.dataset.theme;
+      globalThis.__themeMedia.matches = false;
+      globalThis.__themeMedia.listeners.forEach((listener) => listener({ matches: false }));
+      return { dark, light: document.documentElement.dataset.theme };
+    })()`);
+    assert.deepEqual(followedSystemTheme, { dark: 'dark', light: 'light' });
     assert.equal(initial.homeHidden, false);
     assert.equal(initial.settingsHidden, true);
     assert.equal(initial.outputSettingsInHome, true, 'frequently used output settings must remain on the capture panel');
@@ -147,6 +166,8 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         autosaveVisible: document.querySelector('.autosave-status').getClientRects().length > 0,
         settingsContentScrollable: document.querySelector('.settings-content').scrollHeight > document.querySelector('.settings-content').clientHeight,
         languageOptionCount: document.querySelectorAll('input[name="language"]').length,
+        themeOptionCount: document.querySelectorAll('input[name="theme"]').length,
+        themeDefault: document.querySelector('input[name="theme"]:checked').value,
         afterCaptureOptionCount: document.querySelectorAll('input[name="afterCapture"]').length,
         afterCaptureDefault: document.querySelector('input[name="afterCapture"]:checked').value,
         filenameOptionCount: document.querySelectorAll('input[name="filenameMode"]').length,
@@ -187,6 +208,8 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.settingsContentScrollable, true);
     assert.ok(Math.max(...metrics.localeLayout.descriptionHeights) - Math.min(...metrics.localeLayout.descriptionHeights) < 0.5, 'setting descriptions must reserve comparable text region heights');
     assert.equal(metrics.languageOptionCount, 3);
+    assert.equal(metrics.themeOptionCount, 3);
+    assert.equal(metrics.themeDefault, 'auto');
     assert.equal(metrics.afterCaptureOptionCount, 3);
     assert.equal(metrics.afterCaptureDefault, 'preview');
     assert.equal(metrics.filenameOptionCount, 3);
@@ -247,6 +270,39 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     })()`);
     assert.ok(fixedChrome.scrollTop > 0);
     assertLayoutsClose(fixedChrome.after, fixedChrome.before);
+
+    const darkTheme = await page.evaluate(`(() => {
+      const light = {
+        canvas: getComputedStyle(document.body).backgroundColor,
+        card: getComputedStyle(document.querySelector('.settings-group')).backgroundColor,
+        control: getComputedStyle(document.querySelector('.theme-segment')).backgroundColor
+      };
+      document.querySelector('input[name="theme"][value="dark"]').click();
+      const dark = {
+        canvas: getComputedStyle(document.body).backgroundColor,
+        card: getComputedStyle(document.querySelector('.settings-group')).backgroundColor,
+        control: getComputedStyle(document.querySelector('.theme-segment')).backgroundColor
+      };
+      return {
+        theme: document.documentElement.dataset.theme,
+        storedTheme: globalThis.__syncStore.uiTheme,
+        light,
+        dark,
+        layout: {
+          shellHeight: document.querySelector('.shell').getBoundingClientRect().height,
+          panelHeight: document.querySelector('#settingsPanel').getBoundingClientRect().height,
+          footerTop: document.querySelector('.popup-footer').getBoundingClientRect().top
+        }
+      };
+    })()`);
+    assert.equal(darkTheme.theme, 'dark');
+    assert.equal(darkTheme.storedTheme, 'dark');
+    assert.notDeepEqual(darkTheme.dark, darkTheme.light);
+    assertLayoutsClose(darkTheme.layout, {
+      shellHeight: metrics.localeLayout.shellHeight,
+      panelHeight: metrics.localeLayout.panelHeight,
+      footerTop: metrics.localeLayout.footerTop,
+    });
 
     const chinese = await page.evaluate(`(() => {
       document.querySelector('input[name="language"][value="zh-CN"]').click();

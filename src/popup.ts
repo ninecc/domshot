@@ -2,6 +2,8 @@ import type { CaptureSettings, ExtensionMessage } from './types';
 import { CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import type { LanguagePreference, UiLocale } from './types';
 import { loadLanguagePreference, localizeDocument, resolveLocale, saveLanguagePreference, t } from './i18n';
+import type { ThemePreference, UiTheme } from './types';
+import { applyDocumentTheme, loadThemePreference, resolveTheme, saveThemePreference } from './theme';
 import './popup.css';
 
 const status = document.querySelector<HTMLElement>('#status')!;
@@ -20,6 +22,7 @@ const backButton = document.querySelector<HTMLButtonElement>('#backButton')!;
 const homePanel = document.querySelector<HTMLElement>('#homePanel')!;
 const settingsPanel = document.querySelector<HTMLElement>('#settingsPanel')!;
 let activeLocale: UiLocale = resolveLocale('auto');
+let activeTheme: UiTheme = resolveTheme('auto');
 
 function chosen<T extends string>(name: string): T {
   return document.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)!.value as T;
@@ -42,6 +45,10 @@ function readSettings(): CaptureSettings {
 
 function readLanguagePreference(): LanguagePreference {
   return chosen<LanguagePreference>('language');
+}
+
+function readThemePreference(): ThemePreference {
+  return chosen<ThemePreference>('theme');
 }
 
 function applySettings(settings: CaptureSettings) {
@@ -84,6 +91,13 @@ function applyLanguagePreference(preference: LanguagePreference) {
   updateFilenameHint(readSettings().filenameMode);
 }
 
+function applyThemePreference(preference: ThemePreference) {
+  const input = document.querySelector<HTMLInputElement>(`input[name="theme"][value="${preference}"]`);
+  if (input) input.checked = true;
+  activeTheme = resolveTheme(preference);
+  applyDocumentTheme(activeTheme);
+}
+
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url || /^(chrome|edge|about|view-source):/.test(tab.url)) {
@@ -114,7 +128,7 @@ async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_VISIBLE_AREA' | 'DOMSHOT_
     const tab = await getActiveTab();
     const pageZoom = await chrome.tabs.getZoom(tab.id!);
     await ensureContentScript(tab.id!);
-    await chrome.tabs.sendMessage(tab.id!, { type, settings, pageZoom, locale: activeLocale } satisfies ExtensionMessage);
+    await chrome.tabs.sendMessage(tab.id!, { type, settings, pageZoom, locale: activeLocale, theme: activeTheme } satisfies ExtensionMessage);
     window.close();
   } catch (error) {
     button.disabled = false;
@@ -123,7 +137,7 @@ async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_VISIBLE_AREA' | 'DOMSHOT_
   }
 }
 
-document.querySelectorAll<HTMLInputElement>('input:not([name="language"])').forEach((input) => {
+document.querySelectorAll<HTMLInputElement>('input:not([name="language"]):not([name="theme"])').forEach((input) => {
   input.addEventListener('change', async () => {
     const settings = readSettings();
     pixelHint.textContent = t(activeLocale, 'currentScale', { scale: settings.scale });
@@ -132,6 +146,20 @@ document.querySelectorAll<HTMLInputElement>('input:not([name="language"])').forE
     await chrome.storage.sync.set({ captureSettings: settings });
   });
 });
+
+document.querySelectorAll<HTMLInputElement>('input[name="theme"]').forEach((input) => {
+  input.addEventListener('change', () => {
+    const preference = readThemePreference();
+    applyThemePreference(preference);
+    void saveThemePreference(preference);
+  });
+});
+
+try {
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (readThemePreference() === 'auto') applyThemePreference('auto');
+  });
+} catch { /* Older Chrome versions can still apply the theme when the popup reopens. */ }
 
 document.querySelectorAll<HTMLInputElement>('input[name="language"]').forEach((input) => {
   input.addEventListener('change', () => {
@@ -158,8 +186,10 @@ backButton.addEventListener('click', () => {
 void Promise.all([
   chrome.storage.sync.get('captureSettings').catch(() => ({})),
   loadLanguagePreference(),
-]).then(([stored, languagePreference]) => {
+  loadThemePreference(),
+]).then(([stored, languagePreference, themePreference]) => {
   const captureSettings = (stored as Record<string, unknown>).captureSettings as Partial<CaptureSettings> | undefined;
   applyLanguagePreference(languagePreference);
+  applyThemePreference(themePreference);
   applySettings({ ...DEFAULT_SETTINGS, ...(captureSettings ?? {}) });
 });

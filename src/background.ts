@@ -1,5 +1,6 @@
 import type { ExtensionMessage, ResolvedImageResource } from './types';
 import { resolveLocale, t } from './i18n';
+import { resolveTheme } from './theme';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const PERMISSION_REQUEST_TTL = 10 * 60 * 1000;
@@ -30,11 +31,12 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
     const origins = validOrigins(message.origins);
     if (!origins.length) return { opened: false };
     const locale = message.locale ?? resolveLocale('auto');
-    const request = { tabId, origins, patterns: origins.map(originPattern), locale, createdAt: Date.now() };
+    const theme = message.theme ?? resolveTheme('auto');
+    const request = { tabId, origins, patterns: origins.map(originPattern), locale, theme, createdAt: Date.now() };
     await chrome.storage.session.set({ [permissionKey(message.token)]: request });
     return {
       prepared: true,
-      frameUrl: chrome.runtime.getURL(`permission.html?mode=inline&lang=${encodeURIComponent(locale)}&token=${encodeURIComponent(message.token)}`),
+      frameUrl: chrome.runtime.getURL(`permission.html?mode=inline&lang=${encodeURIComponent(locale)}&theme=${encodeURIComponent(theme)}&token=${encodeURIComponent(message.token)}`),
     };
   }
 
@@ -42,7 +44,7 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
     const request = await readPermissionRequest(message.token);
     if (!request) return { opened: false };
     await chrome.windows.create({
-      url: chrome.runtime.getURL(`permission.html?lang=${encodeURIComponent(request.locale)}&token=${encodeURIComponent(message.token)}`),
+      url: chrome.runtime.getURL(`permission.html?lang=${encodeURIComponent(request.locale)}&theme=${encodeURIComponent(request.theme)}&token=${encodeURIComponent(message.token)}`),
       type: 'popup',
       width: 420,
       height: 520,
@@ -138,10 +140,10 @@ function permissionKey(token: string) {
   return `imagePermission:${token.replace(/[^a-z0-9-]/gi, '')}`;
 }
 
-async function readPermissionRequest(token: string): Promise<{ tabId: number; origins: string[]; patterns: string[]; locale: 'en' | 'zh-CN'; createdAt: number } | null> {
+async function readPermissionRequest(token: string): Promise<{ tabId: number; origins: string[]; patterns: string[]; locale: 'en' | 'zh-CN'; theme: 'light' | 'dark'; createdAt: number } | null> {
   const key = permissionKey(token);
   const stored = await chrome.storage.session.get(key);
-  const request = stored[key] as { tabId: number; origins: string[]; patterns: string[]; locale: 'en' | 'zh-CN'; createdAt: number } | undefined;
+  const request = stored[key] as { tabId: number; origins: string[]; patterns: string[]; locale: 'en' | 'zh-CN'; theme: 'light' | 'dark'; createdAt: number } | undefined;
   if (!request || Date.now() - request.createdAt > PERMISSION_REQUEST_TTL) {
     await chrome.storage.session.remove(key);
     return null;

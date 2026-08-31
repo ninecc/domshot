@@ -1,8 +1,9 @@
 import { snapdom } from '@zumer/snapdom';
 import type { SnapdomPlugin } from '@zumer/snapdom';
-import type { CaptureFormat, CaptureSettings, ExtensionMessage, ResolvedImageResource, UiLocale } from './types';
+import type { CaptureFormat, CaptureSettings, ExtensionMessage, ResolvedImageResource, UiLocale, UiTheme } from './types';
 import { CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import { plural, resolveLocale, t } from './i18n';
+import { resolveTheme } from './theme';
 
 declare global {
   interface Window {
@@ -28,7 +29,7 @@ let currentSession: ViewfinderSession | null = null;
 let currentPageZoom = 1;
 let currentPreviewUpdate: (() => void) | null = null;
 type CaptureClip = { x: number; y: number; width: number; height: number } | null;
-const pendingCaptureRetries = new Map<string, { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; clip: CaptureClip; expires: number }>();
+const pendingCaptureRetries = new Map<string, { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; theme: UiTheme; clip: CaptureClip; expires: number }>();
 
 function installMessageListener() {
   const listener = (message: ExtensionMessage, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
@@ -46,7 +47,7 @@ function installMessageListener() {
     if (message.type === 'DOMSHOT_SELECT') {
       setPageZoom(message.pageZoom);
       currentSession?.destroy();
-      currentSession = new ViewfinderSession({ ...DEFAULT_SETTINGS, ...message.settings }, message.locale ?? resolveLocale('auto'));
+      currentSession = new ViewfinderSession({ ...DEFAULT_SETTINGS, ...message.settings }, message.locale ?? resolveLocale('auto'), message.theme ?? resolveTheme('auto'));
       currentSession.start();
       sendResponse({ started: true });
       return;
@@ -57,7 +58,8 @@ function installMessageListener() {
       currentSession?.destroy();
       currentSession = null;
       const locale = message.locale ?? resolveLocale('auto');
-      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale, null);
+      const theme = message.theme ?? resolveTheme('auto');
+      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale, theme, null);
       sendResponse({ started: true });
       return;
     }
@@ -67,7 +69,8 @@ function installMessageListener() {
       currentSession?.destroy();
       currentSession = null;
       const locale = message.locale ?? resolveLocale('auto');
-      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'visibleArea'), locale, visibleViewportClip());
+      const theme = message.theme ?? resolveTheme('auto');
+      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'visibleArea'), locale, theme, visibleViewportClip());
       sendResponse({ started: true });
       return;
     }
@@ -79,7 +82,7 @@ function installMessageListener() {
         sendResponse({ started: false });
         return;
       }
-      void captureElement(retry.target, retry.settings, retry.label, retry.locale, retry.clip);
+      void captureElement(retry.target, retry.settings, retry.label, retry.locale, retry.theme, retry.clip);
       sendResponse({ started: true });
     }
   };
@@ -106,9 +109,10 @@ class ViewfinderSession {
   private hovered: Element | null = null;
   private active = false;
 
-  constructor(private settings: CaptureSettings, private locale: UiLocale) {
+  constructor(private settings: CaptureSettings, private locale: UiLocale, private theme: UiTheme) {
     this.host.id = ROOT_ID;
     this.host.dataset.domshotUi = 'selector';
+    this.host.dataset.domshotTheme = theme;
     this.shadow = this.host.attachShadow({ mode: 'open' });
     this.shadow.innerHTML = selectorMarkup(this.locale);
     this.outline = this.shadow.querySelector<HTMLElement>('.outline')!;
@@ -181,7 +185,7 @@ class ViewfinderSession {
     this.outline.classList.add('capturing');
     window.setTimeout(async () => {
       this.destroy();
-      await captureElement(target, this.settings, label, this.locale, null);
+      await captureElement(target, this.settings, label, this.locale, this.theme, null);
     }, 120);
   };
 
@@ -189,12 +193,12 @@ class ViewfinderSession {
     if (event.key !== 'Escape') return;
     event.preventDefault();
     this.destroy();
-    showToast(t(this.locale, 'captureCanceled'));
+    showToast(t(this.locale, 'captureCanceled'), this.theme);
   };
 }
 
-async function captureElement(target: Element, settings: CaptureSettings, label: string, locale: UiLocale, clip: CaptureClip) {
-  const progress = showProgress(label, locale);
+async function captureElement(target: Element, settings: CaptureSettings, label: string, locale: UiLocale, theme: UiTheme, clip: CaptureClip) {
+  const progress = showProgress(label, locale, theme);
   const imageResources = createImageResourceTracker();
   try {
     if (settings.captureDelay > 0) await new Promise((resolve) => window.setTimeout(resolve, settings.captureDelay));
@@ -224,25 +228,26 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       failedImageCount: imageResources.failedCount(),
       failedImageUrls: imageResources.failedUrls(),
       locale,
+      theme,
       filename,
-      retry: { target, settings, label, locale, clip },
+      retry: { target, settings, label, locale, theme, clip },
     };
     if (imageResources.failedCount() > 0 || settings.afterCapture === 'preview') {
       showPreview(previewOptions);
     } else if (settings.afterCapture === 'copy') {
       try {
         const announcement = await copyImageToClipboard(image, blob, settings.format, locale);
-        showToast(announcement);
+        showToast(announcement, theme);
       } catch {
         showPreview({ ...previewOptions, initialCopyFailure: true });
       }
     } else {
       downloadBlob(blob, filename);
-      showToast(t(locale, 'downloadStarted'));
+      showToast(t(locale, 'downloadStarted'), theme);
     }
   } catch (error) {
     progress.remove();
-    showError(error instanceof Error ? error.message : t(locale, 'pageResourceFailed'), locale);
+    showError(error instanceof Error ? error.message : t(locale, 'pageResourceFailed'), locale, theme);
   }
 }
 
@@ -267,7 +272,7 @@ async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, local
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'imageEncodeFailed'))), mime, .94));
 }
 
-function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, filename, retry, initialCopyFailure }: {
+function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, theme, filename, retry, initialCopyFailure }: {
   image: HTMLImageElement;
   blob: Blob;
   format: CaptureFormat;
@@ -276,12 +281,13 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   failedImageCount: number;
   failedImageUrls: string[];
   locale: UiLocale;
+  theme: UiTheme;
   filename: string;
-  retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; clip: CaptureClip };
+  retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; theme: UiTheme; clip: CaptureClip };
   initialCopyFailure?: boolean;
 }) {
   removeExtensionUi();
-  const host = createHost('preview');
+  const host = createHost('preview', theme);
   syncPreviewViewport(host);
   const shadow = host.shadowRoot!;
   const url = URL.createObjectURL(blob);
@@ -296,10 +302,11 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
     ${sharedStyles()}
     <style>${previewStyles()}</style>
     <style>${previewInteractionStyles()}</style>
+    <style>${themeStyles()}</style>
     <aside class="preview-card${hasResourceWarning ? ' has-resource-warning' : ''}" role="dialog" aria-label="${previewTitle}">
       <div class="preview-head">
         <div><span class="status-dot">${hasResourceWarning ? '!' : '✓'}</span><strong class="preview-title">${previewTitle}</strong></div>
-        <button class="icon-button close" type="button" aria-label="${t(locale, 'close')}">×</button>
+        <button class="icon-button close" type="button" aria-label="${t(locale, 'close')}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
       </div>
       <div class="image-stage"><img src="${url}" alt="${escapeHtml(t(locale, 'previewAlt', { label }))}" /></div>
       ${hasResourceWarning ? `<div class="resource-warning" role="alert"><span>${failedImageMessage}</span>${failedOrigins.length ? `<button class="grant-images" type="button">${authorizeOrigins}</button>` : ''}</div>` : ''}
@@ -375,6 +382,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
         token: retryToken,
         origins: failedOrigins,
         locale,
+        theme,
       } satisfies ExtensionMessage) as { prepared?: boolean; frameUrl?: string } | undefined;
       if (!response?.prepared || !response.frameUrl) throw new Error(t(locale, 'permissionPrepareFailed'));
       card.classList.add('is-authorizing');
@@ -456,39 +464,42 @@ async function toPngBlob(image: HTMLImageElement, locale: UiLocale): Promise<Blo
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'pngConversionFailed'))), 'image/png'));
 }
 
-function showProgress(label: string, locale: UiLocale): HTMLElement {
+function showProgress(label: string, locale: UiLocale, theme: UiTheme): HTMLElement {
   removeExtensionUi();
-  const host = createHost('progress');
+  const host = createHost('progress', theme);
   host.shadowRoot!.innerHTML = `
     ${sharedStyles()}
     <style>${toastStyles()}</style>
+    <style>${themeStyles()}</style>
     <div class="toast progress"><span class="spinner"></span><span><strong>${t(locale, 'generatingImage')}</strong><small>${escapeHtml(t(locale, 'doNotSwitch', { label }))}</small></span></div>`;
   document.documentElement.appendChild(host);
   return host;
 }
 
-function showError(message: string, locale: UiLocale) {
-  const host = createHost('error');
+function showError(message: string, locale: UiLocale, theme: UiTheme) {
+  const host = createHost('error', theme);
   host.shadowRoot!.innerHTML = `
     ${sharedStyles()}
     <style>${toastStyles()}</style>
+    <style>${themeStyles()}</style>
     <div class="toast error"><span class="error-mark">!</span><span><strong>${t(locale, 'captureFailed')}</strong><small>${escapeHtml(t(locale, 'checkResources', { message }))}</small></span><button type="button">${t(locale, 'close')}</button></div>`;
   host.shadowRoot!.querySelector('button')!.addEventListener('click', () => host.remove());
   document.documentElement.appendChild(host);
 }
 
-function showToast(message: string) {
+function showToast(message: string, theme: UiTheme) {
   removeExtensionUi();
-  const host = createHost('toast');
-  host.shadowRoot!.innerHTML = `${sharedStyles()}<style>${toastStyles()}</style><div class="toast compact"><strong>${escapeHtml(message)}</strong></div>`;
+  const host = createHost('toast', theme);
+  host.shadowRoot!.innerHTML = `${sharedStyles()}<style>${toastStyles()}</style><style>${themeStyles()}</style><div class="toast compact"><strong>${escapeHtml(message)}</strong></div>`;
   document.documentElement.appendChild(host);
   window.setTimeout(() => host.remove(), 1800);
 }
 
-function createHost(kind: string): HTMLDivElement {
+function createHost(kind: string, theme: UiTheme): HTMLDivElement {
   const host = document.createElement('div');
   host.id = ROOT_ID;
   host.dataset.domshotUi = kind;
+  host.dataset.domshotTheme = theme;
   host.attachShadow({ mode: 'open' });
   return host;
 }
@@ -643,6 +654,7 @@ function selectorMarkup(locale: UiLocale) {
     <style>
       :host{cursor:crosshair}.outline{position:fixed;left:0;top:0;display:none;border:2px solid #2563eb;background:rgba(37,99,235,.1);box-shadow:0 0 0 1px rgba(255,255,255,.9),inset 0 0 0 1px rgba(139,92,246,.25);transition:width .06s,height .06s,transform .06s}.outline.capturing{animation:pulse .7s infinite alternate}.element-label{position:fixed;left:0;top:0;display:none;max-width:300px;padding:5px 8px;border-radius:6px;color:#fff;background:linear-gradient(135deg,#2563eb,#7c3aed);font:600 10px/1.3 ui-monospace,SFMono-Regular,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.toolbar{position:fixed;left:50%;top:18px;padding:11px 16px;border:1px solid rgba(255,255,255,.72);border-radius:13px;color:#0f172a;background:rgba(255,255,255,.96);box-shadow:0 12px 34px rgba(15,23,42,.18);transform:translateX(-50%);pointer-events:auto}.toolbar strong,.toolbar small{display:block}.toolbar strong{font-size:12px}.toolbar small{color:#64748b;font-size:9px;margin-top:2px}@keyframes pulse{to{background:rgba(139,92,246,.22)}}.spinner{float:left;width:17px;height:17px;margin:2px 10px 0 0;border:2px solid #dbe5f7;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.outline{transition:none}.spinner{animation-duration:1.5s}}
     </style>
+    <style>${themeStyles()}</style>
     <div class="outline"></div><div class="element-label"></div>
     <div class="toolbar"><strong>${t(locale, 'selectElementToolbar')}</strong><small>${t(locale, 'moveClick')}</small></div>`;
 }
@@ -654,13 +666,46 @@ function previewStyles() {
 
 function previewInteractionStyles() {
   return `
+    .icon-button{display:grid;place-items:center;padding:0;line-height:1;transition:color .15s ease}
+    .icon-button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+    .icon-button:hover{color:#2563eb;background:transparent}
     .preview-actions button{transition:border-color .15s ease,background-color .15s ease,color .15s ease,box-shadow .15s ease,filter .15s ease}
+    .preview-actions .download{border:1px solid transparent}
     .preview-actions button:hover{transform:none;border-color:#b7c9f7;box-shadow:0 7px 18px rgba(37,99,235,.1)}
     .preview-actions .download:not(.is-success):not(.is-error):hover{filter:brightness(.9) saturate(1.08);box-shadow:0 8px 20px rgba(37,99,235,.22)}
     .preview-actions button.is-success{border-color:#86efac;color:#047857;background:#ecfdf5}
     .preview-actions button.is-error{border-color:#fecaca;color:#b91c1c;background:#fff1f2}
     .action-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
     @media(prefers-reduced-motion:reduce){.preview-actions button{transition:none}}
+  `;
+}
+
+function themeStyles() {
+  return `
+    :host([data-domshot-theme="dark"]){color:#e6edf8}
+    :host([data-domshot-theme="dark"]) .toolbar,
+    :host([data-domshot-theme="dark"]) .toast{border-color:#334155;color:#e6edf8;background:rgba(15,23,42,.97);box-shadow:0 12px 34px rgba(0,0,0,.38)}
+    :host([data-domshot-theme="dark"]) .toolbar small,
+    :host([data-domshot-theme="dark"]) .toast small,
+    :host([data-domshot-theme="dark"]) .meta{color:#94a3b8}
+    :host([data-domshot-theme="dark"]) .preview-card{border-color:#334155;color:#e6edf8;background:#0f172a;box-shadow:0 18px 52px rgba(0,0,0,.48)}
+    :host([data-domshot-theme="dark"]) .icon-button{color:#94a3b8}
+    :host([data-domshot-theme="dark"]) .icon-button:hover{color:#60a5fa;background:transparent}
+    :host([data-domshot-theme="dark"]) .image-stage{border-color:#334155;background:repeating-conic-gradient(#1e293b 0 25%,#0b1220 0 50%) 50%/14px 14px}
+    :host([data-domshot-theme="dark"]) .resource-warning{border-color:#854d0e;color:#fcd34d;background:#2a1f0b}
+    :host([data-domshot-theme="dark"]) .grant-images{border-color:#a16207;color:#fde68a;background:#1c1917}
+    :host([data-domshot-theme="dark"]) .grant-images:hover{border-color:#d97706;background:#29200f}
+    :host([data-domshot-theme="dark"]) .permission-panel iframe{background:#0f172a}
+    :host([data-domshot-theme="dark"]) .open-permission-window{color:#94a3b8}
+    :host([data-domshot-theme="dark"]) .preview-actions button{border-color:#334155;color:#e6edf8;background:#111b2b}
+    :host([data-domshot-theme="dark"]) .preview-actions .download{border:1px solid transparent;color:#fff;background:linear-gradient(135deg,#2563eb,#7c3aed)}
+    :host([data-domshot-theme="dark"]) .preview-actions button:not(.is-success):not(.is-error):hover{border-color:#60a5fa;background:#16243a;box-shadow:0 7px 18px rgba(37,99,235,.2)}
+    :host([data-domshot-theme="dark"]) .preview-actions .download:not(.is-success):not(.is-error):hover{border-color:#93c5fd;color:#fff;background:linear-gradient(135deg,#1d4ed8,#6d28d9);filter:brightness(.96) saturate(1.08);box-shadow:0 8px 20px rgba(37,99,235,.3)}
+    :host([data-domshot-theme="dark"]) .preview-actions button.is-success{border-color:#166534;color:#6ee7b7;background:#063b2c}
+    :host([data-domshot-theme="dark"]) .preview-actions button.is-error{border-color:#991b1b;color:#fca5a5;background:#3f1118}
+    :host([data-domshot-theme="dark"]) .toast.error{border-color:#7f1d1d;background:#2b1116}
+    :host([data-domshot-theme="dark"]) .toast button{color:#60a5fa}
+    :host([data-domshot-theme="dark"]) .outline{border-color:#60a5fa;background:rgba(37,99,235,.16);box-shadow:0 0 0 1px rgba(15,23,42,.95),inset 0 0 0 1px rgba(167,139,250,.3)}
   `;
 }
 
