@@ -44,14 +44,14 @@
 
         <section class="settings-group general-settings" aria-labelledby="general-title">
           <div class="advanced-heading"><h2 id="general-title" data-i18n="generalSettings">General</h2></div>
-          <div class="setting-row language-row"><span data-i18n="language">Language</span><div class="segment language-segment" role="radiogroup" aria-label="Language" data-i18n-aria-label="language"><label><input type="radio" name="language" value="auto" checked /><span data-i18n="followBrowser">Browser</span></label><label><input type="radio" name="language" value="zh-CN" /><span data-i18n="chinese">中文</span></label><label><input type="radio" name="language" value="en" /><span data-i18n="english">English</span></label></div></div>
+          <div class="setting-row language-row"><span data-i18n="language">Language</span><div class="segment language-segment" role="radiogroup" aria-label="Language" data-i18n-aria-label="language"><label><input type="radio" name="language" value="auto" checked /><span data-i18n="followBrowser">Auto</span></label><label><input type="radio" name="language" value="zh-CN" /><span data-i18n="chinese">中文</span></label><label><input type="radio" name="language" value="en" /><span data-i18n="english">English</span></label></div></div>
         </section>
 
         <section class="settings-group advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
           <div class="advanced-heading"><h2 id="advanced-title" data-i18n="advancedSettings">Advanced</h2><span class="autosave-status"><b aria-hidden="true">✓</b> <span data-i18n="autosave">Auto-saved</span></span></div>
           <div class="advanced-options">
             <label class="toggle-row"><span><strong data-i18n="embedFonts">Embed web fonts</strong><small data-i18n="embedFontsDesc">Improves custom font fidelity but takes longer</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
-            <label class="toggle-row"><span><strong data-i18n="reconcile">Precise layout calibration</strong><small data-i18n="reconcileDesc">Reduces wrapping and layout shifts but roughly doubles processing time</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="reconcile">Precise layout calibration</strong><small data-i18n="reconcileDesc">More accurate layouts, about 2× slower</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
           </div>
         </section>
       </section>

@@ -88,6 +88,24 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         settingsHidden: document.querySelector('#settingsPanel').hidden,
         scrollWidth: document.documentElement.scrollWidth,
         scrollHeight: document.documentElement.scrollHeight,
+        implicitLineHeights: ['#general-title', '#advanced-title', '.autosave-status', '.language-segment span', '.toggle-row strong', '.status', '.attribution']
+          .map((selector) => ({ selector, lineHeight: getComputedStyle(document.querySelector(selector)).lineHeight })),
+        localeLayout: (() => {
+          const stable = (value) => Math.round(value * 100) / 100;
+          const height = (selector) => stable(document.querySelector(selector).getBoundingClientRect().height);
+          return {
+            shellHeight: height('.shell'),
+            panelHeight: height('#settingsPanel'),
+            generalHeight: height('.general-settings'),
+            advancedHeight: height('.advanced-settings'),
+            footerHeight: height('.popup-footer'),
+            statusHeight: height('.status'),
+            attributionHeight: height('.attribution'),
+            languageWidth: stable(document.querySelector('.language-segment').getBoundingClientRect().width),
+            descriptionHeights: [...document.querySelectorAll('.advanced-options small')].map((item) => stable(item.getBoundingClientRect().height)),
+            footerTop: stable(document.querySelector('.popup-footer').getBoundingClientRect().top)
+          };
+        })(),
         settingsSubtitle: Boolean(document.querySelector('.settings-header p')),
         settingsTitleVisible: document.querySelector('#settings-title').getClientRects().length > 0,
         backButtonVisible: document.querySelector('#backButton').getClientRects().length > 0,
@@ -121,7 +139,9 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.settingsTitleVisible, true);
     assert.equal(metrics.backButtonVisible, true);
     assert.equal(metrics.autosaveVisible, true);
+    assert.ok(Math.abs(metrics.localeLayout.descriptionHeights[0] - metrics.localeLayout.descriptionHeights[1]) < 0.5, 'setting descriptions must reserve comparable text region heights');
     assert.equal(metrics.languageOptionCount, 3);
+    assert.deepEqual(metrics.implicitLineHeights.filter(({ lineHeight }) => lineHeight === 'normal'), [], 'localized text must not rely on font-dependent normal line height');
     assert.equal(metrics.footerVisible, true, 'shared footer must remain visible on the settings panel');
     assert.equal(metrics.advancedSurface.backgroundImage, 'none', 'settings containers must not use decorative gradients');
     assert.equal(metrics.advancedSurface.backgroundColor, metrics.outputSurface.backgroundColor, 'settings containers should share one surface color');
@@ -146,6 +166,22 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         advancedTitle: document.querySelector('#advanced-title').textContent,
         footer: document.querySelector('.status-copy').textContent,
         autoLabel: document.querySelector('input[name="language"][value="auto"] + span').textContent,
+        layout: (() => {
+          const stable = (value) => Math.round(value * 100) / 100;
+          const height = (selector) => stable(document.querySelector(selector).getBoundingClientRect().height);
+          return {
+            shellHeight: height('.shell'),
+            panelHeight: height('#settingsPanel'),
+            generalHeight: height('.general-settings'),
+            advancedHeight: height('.advanced-settings'),
+            footerHeight: height('.popup-footer'),
+            statusHeight: height('.status'),
+            attributionHeight: height('.attribution'),
+            languageWidth: stable(document.querySelector('.language-segment').getBoundingClientRect().width),
+            descriptionHeights: [...document.querySelectorAll('.advanced-options small')].map((item) => stable(item.getBoundingClientRect().height)),
+            footerTop: stable(document.querySelector('.popup-footer').getBoundingClientRect().top)
+          };
+        })(),
         storedLanguage: globalThis.__syncStore.uiLanguage
       };
     })()`);
@@ -154,6 +190,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.ok([chinese.settingsTitle, chinese.generalTitle, chinese.advancedTitle, chinese.footer, chinese.autoLabel].every(Boolean));
     assert.notEqual(chinese.settingsTitle, initial.settingsTitle);
     assert.notEqual(chinese.generalTitle, initial.generalTitle);
+    assertLayoutsClose(chinese.layout, metrics.localeLayout);
 
     const toggleCloseStart = await page.evaluate(`(() => {
       const input = document.querySelector('#embedFonts');
@@ -183,4 +220,17 @@ function buttonColors(page) {
     const style = getComputedStyle(document.querySelector('.settings-button'));
     return { color: style.color, backgroundColor: style.backgroundColor };
   })()`);
+}
+
+function assertLayoutsClose(actual, expected, tolerance = 0.5) {
+  for (const key of Object.keys(expected)) {
+    const actualValue = actual[key];
+    const expectedValue = expected[key];
+    if (Array.isArray(expectedValue)) {
+      assert.equal(actualValue.length, expectedValue.length, `${key} item count changed across locales`);
+      expectedValue.forEach((value, index) => assert.ok(Math.abs(actualValue[index] - value) < tolerance, `${key}[${index}] changed across locales`));
+    } else {
+      assert.ok(Math.abs(actualValue - expectedValue) < tolerance, `${key} changed from ${expectedValue} to ${actualValue}`);
+    }
+  }
 }
