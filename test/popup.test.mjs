@@ -99,13 +99,13 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(primaryHovered.transform, 'none', 'capture actions must not move on hover');
     assert.deepEqual(primaryHovered.rect, primaryIdle.rect, 'capture action position must remain stable on hover');
 
-    const idleButton = await buttonColors(page);
+    const idleButton = await buttonMetrics(page, '.settings-button');
     await page.hover('.settings-button');
     await page.waitUntil(
       `getComputedStyle(document.querySelector('.settings-button')).color !== ${JSON.stringify(idleButton.color)}`,
       'settings hover did not change the icon color',
     );
-    const hoveredButton = await buttonColors(page);
+    const hoveredButton = await buttonMetrics(page, '.settings-button');
     assert.notEqual(hoveredButton.color, idleButton.color, 'settings hover must change the icon color');
     assert.equal(hoveredButton.backgroundColor, 'rgba(0, 0, 0, 0)', 'settings hover must keep a transparent background');
 
@@ -208,6 +208,27 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.ok(metrics.scrollHeight <= 600, `expanded popup is ${metrics.scrollHeight}px tall and requires a scrollbar`);
     assert.ok(metrics.localeLayout.shellHeight <= 600, `settings content is ${metrics.localeLayout.shellHeight}px tall`);
 
+    await page.waitUntil(
+      `getComputedStyle(document.querySelector('#settingsPanel')).transform === 'none'`,
+      'settings panel entrance animation did not finish',
+    );
+    const backIdle = await buttonMetrics(page, '.back-button');
+    assert.deepEqual(
+      { width: backIdle.rect.width, height: backIdle.rect.height },
+      { width: idleButton.rect.width, height: idleButton.rect.height },
+      'settings and back buttons must share the same dimensions',
+    );
+    await page.hover('.back-button');
+    await page.waitUntil(
+      `getComputedStyle(document.querySelector('.back-button')).color !== ${JSON.stringify(backIdle.color)}`,
+      'back hover did not change the icon color',
+    );
+    const backHovered = await buttonMetrics(page, '.back-button');
+    assert.notEqual(backHovered.color, backIdle.color);
+    assert.equal(backHovered.backgroundColor, 'rgba(0, 0, 0, 0)');
+    assert.equal(backHovered.transform, 'none');
+    assert.deepEqual(backHovered.rect, backIdle.rect, 'back button must not move on hover');
+
     const fixedChrome = await page.evaluate(`(() => {
       const content = document.querySelector('.settings-content');
       const header = document.querySelector('.settings-header');
@@ -301,10 +322,12 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
   });
 });
 
-function buttonColors(page) {
+function buttonMetrics(page, selector) {
   return page.evaluate(`(() => {
-    const style = getComputedStyle(document.querySelector('.settings-button'));
-    return { color: style.color, backgroundColor: style.backgroundColor };
+    const button = document.querySelector(${JSON.stringify(selector)});
+    const style = getComputedStyle(button);
+    const rect = button.getBoundingClientRect();
+    return { color: style.color, backgroundColor: style.backgroundColor, transform: style.transform, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
   })()`);
 }
 
