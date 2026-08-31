@@ -1,4 +1,6 @@
 import type { ExtensionMessage } from './types';
+import type { UiLocale } from './types';
+import { isUiLocale, localizeDocument, plural, resolveLocale, t } from './i18n';
 import './permission.css';
 
 const grantButton = document.querySelector<HTMLButtonElement>('#grantPermission')!;
@@ -9,8 +11,11 @@ const originCount = document.querySelector<HTMLElement>('#originCount')!;
 const params = new URLSearchParams(location.search);
 const token = params.get('token') || '';
 const inline = params.get('mode') === 'inline';
+const requestedLocale = params.get('lang');
+const locale: UiLocale = isUiLocale(requestedLocale) ? requestedLocale : resolveLocale('auto');
+localizeDocument(locale);
 document.documentElement.dataset.mode = inline ? 'inline' : 'window';
-if (inline) cancelButton.textContent = '返回截图';
+if (inline) cancelButton.textContent = t(locale, 'backCapture');
 let patterns: string[] = [];
 
 void loadRequest();
@@ -23,15 +28,15 @@ async function loadRequest() {
       patterns?: string[];
     } | undefined;
     if (!response?.ok || !response.origins?.length || !response.patterns?.length) {
-      showUnavailable('授权请求已失效，请返回原页面重新截图。');
+      showUnavailable(t(locale, 'requestExpired'));
       return;
     }
     patterns = response.patterns;
-    originCount.textContent = `${response.origins.length} 个`;
+    originCount.textContent = plural(locale, 'originCountOne', 'originCountMany', response.origins.length);
     originList.replaceChildren(...response.origins.map(originItem));
     grantButton.disabled = false;
   } catch {
-    showUnavailable('无法读取授权请求，请关闭窗口后重试。');
+    showUnavailable(t(locale, 'requestReadFailed'));
   }
 }
 
@@ -39,27 +44,27 @@ grantButton.addEventListener('click', async () => {
   if (!patterns.length) return;
   grantButton.disabled = true;
   cancelButton.disabled = true;
-  grantButton.textContent = '等待浏览器确认…';
+  grantButton.textContent = t(locale, 'waitingBrowser');
   status.textContent = '';
   try {
     const granted = await chrome.permissions.request({ origins: patterns });
     if (!granted) {
-      status.textContent = '未授权。当前截图仍可使用占位内容；需要时可以再次授权。';
+      status.textContent = t(locale, 'permissionDeclined');
       status.className = 'permission-status is-declined';
-      grantButton.textContent = '再次授权';
+      grantButton.textContent = t(locale, 'retryPermission');
       grantButton.disabled = false;
       cancelButton.disabled = false;
       return;
     }
     const result = await chrome.runtime.sendMessage({ type: 'DOMSHOT_COMPLETE_IMAGE_PERMISSION', token } satisfies ExtensionMessage) as { retried?: boolean } | undefined;
-    status.textContent = result?.retried ? '已授权，正在原页面重新截图…' : '已授权，但原页面已关闭或发生了跳转。';
+    status.textContent = t(locale, result?.retried ? 'authorizedRetrying' : 'authorizedNavigated');
     status.className = result?.retried ? 'permission-status is-success' : 'permission-status is-declined';
-    grantButton.textContent = result?.retried ? '正在重新截图' : '已授权';
+    grantButton.textContent = t(locale, result?.retried ? 'recapturing' : 'authorized');
     if (result?.retried && !inline) window.setTimeout(() => window.close(), 900);
   } catch {
-    status.textContent = '权限请求未完成，请稍后再次尝试。';
+    status.textContent = t(locale, 'permissionIncomplete');
     status.className = 'permission-status is-declined';
-    grantButton.textContent = '再次授权';
+    grantButton.textContent = t(locale, 'retryPermission');
     grantButton.disabled = false;
     cancelButton.disabled = false;
   }
@@ -74,7 +79,7 @@ cancelButton.addEventListener('click', async () => {
 function originItem(origin: string) {
   const item = document.createElement('li');
   const url = new URL(origin);
-  item.innerHTML = `<span class="origin-icon" aria-hidden="true">IMG</span><span><strong>${escapeHtml(url.hostname)}</strong><small>${escapeHtml(url.protocol.replace(':', '').toUpperCase())}${url.port ? ` · 端口 ${escapeHtml(url.port)}` : ''}</small></span>`;
+  item.innerHTML = `<span class="origin-icon" aria-hidden="true">IMG</span><span><strong>${escapeHtml(url.hostname)}</strong><small>${escapeHtml(url.protocol.replace(':', '').toUpperCase())}${url.port ? ` · ${escapeHtml(t(locale, 'port', { port: url.port }))}` : ''}</small></span>`;
   return item;
 }
 
@@ -82,7 +87,7 @@ function showUnavailable(message: string) {
   status.textContent = message;
   status.className = 'permission-status is-declined';
   grantButton.disabled = true;
-  originList.innerHTML = '<li class="empty">没有待处理的图片来源</li>';
+  originList.innerHTML = `<li class="empty">${escapeHtml(t(locale, 'noPendingOrigins'))}</li>`;
 }
 
 function escapeHtml(value: string) {

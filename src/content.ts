@@ -1,7 +1,8 @@
 import { snapdom } from '@zumer/snapdom';
 import type { SnapdomPlugin } from '@zumer/snapdom';
-import type { CaptureFormat, CaptureSettings, ExtensionMessage, ResolvedImageResource } from './types';
+import type { CaptureFormat, CaptureSettings, ExtensionMessage, ResolvedImageResource, UiLocale } from './types';
 import { CONTENT_SCRIPT_PROTOCOL } from './types';
+import { plural, resolveLocale, t } from './i18n';
 
 declare global {
   interface Window {
@@ -26,7 +27,7 @@ const hostCleanups = new WeakMap<Element, () => void>();
 let currentSession: ViewfinderSession | null = null;
 let currentPageZoom = 1;
 let currentPreviewUpdate: (() => void) | null = null;
-const pendingCaptureRetries = new Map<string, { target: Element; settings: CaptureSettings; label: string; expires: number }>();
+const pendingCaptureRetries = new Map<string, { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; expires: number }>();
 
 function installMessageListener() {
   const listener = (message: ExtensionMessage, _sender: chrome.runtime.MessageSender, sendResponse: (response?: unknown) => void) => {
@@ -44,7 +45,7 @@ function installMessageListener() {
     if (message.type === 'DOMSHOT_SELECT') {
       setPageZoom(message.pageZoom);
       currentSession?.destroy();
-      currentSession = new ViewfinderSession(message.settings);
+      currentSession = new ViewfinderSession(message.settings, message.locale ?? resolveLocale('auto'));
       currentSession.start();
       sendResponse({ started: true });
       return;
@@ -54,7 +55,8 @@ function installMessageListener() {
       setPageZoom(message.pageZoom);
       currentSession?.destroy();
       currentSession = null;
-      void captureElement(document.documentElement, message.settings, '完整页面');
+      const locale = message.locale ?? resolveLocale('auto');
+      void captureElement(document.documentElement, message.settings, t(locale, 'fullPage'), locale);
       sendResponse({ started: true });
       return;
     }
@@ -66,7 +68,7 @@ function installMessageListener() {
         sendResponse({ started: false });
         return;
       }
-      void captureElement(retry.target, retry.settings, retry.label);
+      void captureElement(retry.target, retry.settings, retry.label, retry.locale);
       sendResponse({ started: true });
     }
   };
@@ -83,11 +85,11 @@ class ViewfinderSession {
   private hovered: Element | null = null;
   private active = false;
 
-  constructor(private settings: CaptureSettings) {
+  constructor(private settings: CaptureSettings, private locale: UiLocale) {
     this.host.id = ROOT_ID;
     this.host.dataset.domshotUi = 'selector';
     this.shadow = this.host.attachShadow({ mode: 'open' });
-    this.shadow.innerHTML = selectorMarkup();
+    this.shadow.innerHTML = selectorMarkup(this.locale);
     this.outline = this.shadow.querySelector<HTMLElement>('.outline')!;
     this.label = this.shadow.querySelector<HTMLElement>('.element-label')!;
     this.toolbar = this.shadow.querySelector<HTMLElement>('.toolbar')!;
@@ -154,11 +156,11 @@ class ViewfinderSession {
     const target = this.hovered;
     if (!target) return;
     const label = describeElement(target);
-    this.toolbar.innerHTML = '<span class="spinner"></span><strong>正在生成图片</strong><small>正在嵌入样式与资源…</small>';
+    this.toolbar.innerHTML = `<span class="spinner"></span><strong>${t(this.locale, 'generatingImage')}</strong><small>${t(this.locale, 'embeddingResources')}</small>`;
     this.outline.classList.add('capturing');
     window.setTimeout(async () => {
       this.destroy();
-      await captureElement(target, this.settings, label);
+      await captureElement(target, this.settings, label, this.locale);
     }, 120);
   };
 
@@ -166,12 +168,12 @@ class ViewfinderSession {
     if (event.key !== 'Escape') return;
     event.preventDefault();
     this.destroy();
-    showToast('已取消截图');
+    showToast(t(this.locale, 'captureCanceled'));
   };
 }
 
-async function captureElement(target: Element, settings: CaptureSettings, label: string) {
-  const progress = showProgress(label);
+async function captureElement(target: Element, settings: CaptureSettings, label: string, locale: UiLocale) {
+  const progress = showProgress(label, locale);
   const imageResources = createImageResourceTracker();
   try {
     const result = await snapdom(target, {
@@ -185,7 +187,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
     });
 
     const image = await exportImage(result, settings.format);
-    const blob = await imageToBlob(image, settings.format);
+    const blob = await imageToBlob(image, settings.format, locale);
     progress.remove();
     showPreview({
       image,
@@ -195,11 +197,12 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       scale: settings.scale,
       failedImageCount: imageResources.failedCount(),
       failedImageUrls: imageResources.failedUrls(),
-      retry: { target, settings, label },
+      locale,
+      retry: { target, settings, label, locale },
     });
   } catch (error) {
     progress.remove();
-    showError(error instanceof Error ? error.message : '页面资源无法转换为图片');
+    showError(error instanceof Error ? error.message : t(locale, 'pageResourceFailed'), locale);
   }
 }
 
@@ -211,7 +214,7 @@ async function exportImage(result: SnapResult, format: CaptureFormat): Promise<H
   return result.toPng();
 }
 
-async function imageToBlob(image: HTMLImageElement, format: CaptureFormat): Promise<Blob> {
+async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, locale: UiLocale): Promise<Blob> {
   const response = await fetch(image.src);
   const original = await response.blob();
   const mime = format === 'jpg' ? 'image/jpeg' : `image/${format}`;
@@ -221,10 +224,10 @@ async function imageToBlob(image: HTMLImageElement, format: CaptureFormat): Prom
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
   canvas.getContext('2d')!.drawImage(image, 0, 0);
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('图片编码失败')), mime, .94));
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'imageEncodeFailed'))), mime, .94));
 }
 
-function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, retry }: {
+function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, retry }: {
   image: HTMLImageElement;
   blob: Blob;
   format: CaptureFormat;
@@ -232,7 +235,8 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   scale: number;
   failedImageCount: number;
   failedImageUrls: string[];
-  retry: { target: Element; settings: CaptureSettings; label: string };
+  locale: UiLocale;
+  retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale };
 }) {
   removeExtensionUi();
   const host = createHost('preview');
@@ -243,28 +247,30 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   const extension = format === 'jpg' ? 'jpg' : format;
   const hasResourceWarning = failedImageCount > 0;
   const failedOrigins = imageOrigins(failedImageUrls);
-  const previewTitle = hasResourceWarning ? '截图完成，但部分图片加载失败' : '截图完成';
+  const previewTitle = t(locale, hasResourceWarning ? 'capturePartial' : 'captureComplete');
+  const failedImageMessage = plural(locale, 'imageFailedOne', 'imageFailedMany', failedImageCount);
+  const authorizeOrigins = plural(locale, 'authorizeOriginOne', 'authorizeOriginMany', failedOrigins.length);
   shadow.innerHTML = `
     ${sharedStyles()}
     <style>${previewStyles()}</style>
     <aside class="preview-card${hasResourceWarning ? ' has-resource-warning' : ''}" role="dialog" aria-label="${previewTitle}">
       <div class="preview-head">
         <div><span class="status-dot">${hasResourceWarning ? '!' : '✓'}</span><strong class="preview-title">${previewTitle}</strong></div>
-        <button class="icon-button close" type="button" aria-label="关闭">×</button>
+        <button class="icon-button close" type="button" aria-label="${t(locale, 'close')}">×</button>
       </div>
-      <div class="image-stage"><img src="${url}" alt="${escapeHtml(label)} 的截图预览" /></div>
-      ${hasResourceWarning ? `<div class="resource-warning" role="alert"><span>${failedImageCount} 张图片加载失败，截图中已显示为占位内容。</span>${failedOrigins.length ? `<button class="grant-images" type="button">授权 ${failedOrigins.length} 个图片来源并重试</button>` : ''}</div>` : ''}
+      <div class="image-stage"><img src="${url}" alt="${escapeHtml(t(locale, 'previewAlt', { label }))}" /></div>
+      ${hasResourceWarning ? `<div class="resource-warning" role="alert"><span>${failedImageMessage}</span>${failedOrigins.length ? `<button class="grant-images" type="button">${authorizeOrigins}</button>` : ''}</div>` : ''}
       <div class="permission-panel" hidden>
-        <iframe title="图片来源授权"></iframe>
-        <button class="open-permission-window" type="button">无法显示？在独立窗口打开</button>
+        <iframe title="${t(locale, 'imageSourcePermission')}"></iframe>
+        <button class="open-permission-window" type="button">${t(locale, 'openStandalone')}</button>
       </div>
       <div class="meta">
         <span>${escapeHtml(label)}</span>
         <span>${image.naturalWidth} × ${image.naturalHeight} · ${scale}× · ${size}</span>
       </div>
       <div class="preview-actions">
-        <button class="copy" type="button">复制图片</button>
-        <button class="download" type="button">下载 ${extension.toUpperCase()}</button>
+        <button class="copy" type="button">${t(locale, 'copyImage')}</button>
+        <button class="download" type="button">${t(locale, 'downloadFormat', { format: extension.toUpperCase() })}</button>
       </div>
       <p class="feedback" role="status"></p>
       <span class="copy-status" aria-live="polite" aria-atomic="true"></span>
@@ -303,91 +309,92 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
     retryToken ??= crypto.randomUUID();
     pendingCaptureRetries.set(retryToken, { ...retry, expires: Date.now() + 10 * 60 * 1000 });
     grantButton.disabled = true;
-    grantButton.textContent = '正在准备授权…';
+    grantButton.textContent = t(locale, 'preparingPermission');
     try {
       const response = await chrome.runtime.sendMessage({
         type: 'DOMSHOT_PREPARE_IMAGE_PERMISSION',
         token: retryToken,
         origins: failedOrigins,
+        locale,
       } satisfies ExtensionMessage) as { prepared?: boolean; frameUrl?: string } | undefined;
-      if (!response?.prepared || !response.frameUrl) throw new Error('授权内容未能准备');
+      if (!response?.prepared || !response.frameUrl) throw new Error(t(locale, 'permissionPrepareFailed'));
       card.classList.add('is-authorizing');
-      card.setAttribute('aria-label', '授权图片来源');
-      title.textContent = '授权图片来源';
+      card.setAttribute('aria-label', t(locale, 'authorizeImageSources'));
+      title.textContent = t(locale, 'authorizeImageSources');
       statusDot.textContent = '↗';
       permissionPanel.hidden = false;
       permissionFrame.src = response.frameUrl;
     } catch {
-      feedback(shadow, '无法加载授权内容，请重试', true);
+      feedback(shadow, t(locale, 'permissionLoadFailed'), true);
     } finally {
       grantButton.disabled = false;
-      grantButton.textContent = `授权 ${failedOrigins.length} 个图片来源并重试`;
+      grantButton.textContent = authorizeOrigins;
     }
   });
   shadow.querySelector('.open-permission-window')!.addEventListener('click', async () => {
     if (!retryToken) return;
     const response = await chrome.runtime.sendMessage({ type: 'DOMSHOT_OPEN_IMAGE_PERMISSION', token: retryToken } satisfies ExtensionMessage) as { opened?: boolean } | undefined;
-    if (!response?.opened) feedback(shadow, '无法打开授权窗口，请重试', true);
+    if (!response?.opened) feedback(shadow, t(locale, 'permissionWindowFailed'), true);
   });
   shadow.querySelector('.download')!.addEventListener('click', () => {
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.download = `domshot-${safeFilename(label)}-${timestamp()}.${extension}`;
     anchor.click();
-    feedback(shadow, '已开始下载');
+    feedback(shadow, t(locale, 'downloadStarted'));
   });
   const copyButton = shadow.querySelector<HTMLButtonElement>('.copy')!;
   const copyStatus = shadow.querySelector<HTMLElement>('.copy-status')!;
   const resetCopyButton = () => {
     copyButton.classList.remove('is-success');
-    copyButton.textContent = '复制图片';
+    copyButton.textContent = t(locale, 'copyImage');
     copyStatus.textContent = '';
     copyResetTimer = null;
   };
   copyButton.addEventListener('click', async () => {
     try {
-      const png = format === 'png' ? blob : await toPngBlob(image);
+      const png = format === 'png' ? blob : await toPngBlob(image, locale);
       await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
       if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
       feedback(shadow, '');
       copyButton.classList.add('is-success');
-      copyButton.textContent = '✓ 已复制';
-      copyStatus.textContent = format === 'png' ? '图片已复制' : '已转为 PNG 并复制';
+      copyButton.textContent = t(locale, 'copied');
+      copyStatus.textContent = t(locale, format === 'png' ? 'imageCopied' : 'convertedCopied');
       copyResetTimer = window.setTimeout(resetCopyButton, 1800);
     } catch {
       if (copyResetTimer !== null) window.clearTimeout(copyResetTimer);
       resetCopyButton();
-      feedback(shadow, '浏览器未允许访问剪贴板', true);
+      feedback(shadow, t(locale, 'clipboardDenied'), true);
     }
   });
   document.documentElement.appendChild(host);
 }
 
-async function toPngBlob(image: HTMLImageElement): Promise<Blob> {
+async function toPngBlob(image: HTMLImageElement, locale: UiLocale): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
   canvas.getContext('2d')!.drawImage(image, 0, 0);
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('PNG 转换失败')), 'image/png'));
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'pngConversionFailed'))), 'image/png'));
 }
 
-function showProgress(label: string): HTMLElement {
+function showProgress(label: string, locale: UiLocale): HTMLElement {
   removeExtensionUi();
   const host = createHost('progress');
   host.shadowRoot!.innerHTML = `
     ${sharedStyles()}
     <style>${toastStyles()}</style>
-    <div class="toast progress"><span class="spinner"></span><span><strong>正在生成图片</strong><small>${escapeHtml(label)} · 请勿切换页面</small></span></div>`;
+    <div class="toast progress"><span class="spinner"></span><span><strong>${t(locale, 'generatingImage')}</strong><small>${escapeHtml(t(locale, 'doNotSwitch', { label }))}</small></span></div>`;
   document.documentElement.appendChild(host);
   return host;
 }
 
-function showError(message: string) {
+function showError(message: string, locale: UiLocale) {
   const host = createHost('error');
   host.shadowRoot!.innerHTML = `
     ${sharedStyles()}
     <style>${toastStyles()}</style>
-    <div class="toast error"><span class="error-mark">!</span><span><strong>截图失败</strong><small>${escapeHtml(message)}。请检查跨域图片或字体。</small></span><button type="button">关闭</button></div>`;
+    <div class="toast error"><span class="error-mark">!</span><span><strong>${t(locale, 'captureFailed')}</strong><small>${escapeHtml(t(locale, 'checkResources', { message }))}</small></span><button type="button">${t(locale, 'close')}</button></div>`;
   host.shadowRoot!.querySelector('button')!.addEventListener('click', () => host.remove());
   document.documentElement.appendChild(host);
 }
@@ -558,14 +565,14 @@ function sharedStyles() {
   return `<style>:host{all:initial;position:fixed;inset:0;z-index:2147483647;pointer-events:none;font-family:${UI_FONT};color:#0f172a}*{box-sizing:border-box}button{font:inherit}button:focus-visible{outline:3px solid rgba(37,99,235,.35);outline-offset:2px}</style>`;
 }
 
-function selectorMarkup() {
+function selectorMarkup(locale: UiLocale) {
   return `
     ${sharedStyles()}
     <style>
       :host{cursor:crosshair}.outline{position:fixed;left:0;top:0;display:none;border:2px solid #2563eb;background:rgba(37,99,235,.1);box-shadow:0 0 0 1px rgba(255,255,255,.9),inset 0 0 0 1px rgba(139,92,246,.25);transition:width .06s,height .06s,transform .06s}.outline.capturing{animation:pulse .7s infinite alternate}.element-label{position:fixed;left:0;top:0;display:none;max-width:300px;padding:5px 8px;border-radius:6px;color:#fff;background:linear-gradient(135deg,#2563eb,#7c3aed);font:600 10px/1.3 ui-monospace,SFMono-Regular,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.toolbar{position:fixed;left:50%;top:18px;padding:11px 16px;border:1px solid rgba(255,255,255,.72);border-radius:13px;color:#0f172a;background:rgba(255,255,255,.96);box-shadow:0 12px 34px rgba(15,23,42,.18);transform:translateX(-50%);pointer-events:auto}.toolbar strong,.toolbar small{display:block}.toolbar strong{font-size:12px}.toolbar small{color:#64748b;font-size:9px;margin-top:2px}@keyframes pulse{to{background:rgba(139,92,246,.22)}}.spinner{float:left;width:17px;height:17px;margin:2px 10px 0 0;border:2px solid #dbe5f7;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.outline{transition:none}.spinner{animation-duration:1.5s}}
     </style>
     <div class="outline"></div><div class="element-label"></div>
-    <div class="toolbar"><strong>选择一个页面元素</strong><small>移动鼠标定位 · 单击完成捕获</small></div>`;
+    <div class="toolbar"><strong>${t(locale, 'selectElementToolbar')}</strong><small>${t(locale, 'moveClick')}</small></div>`;
 }
 
 function previewStyles() {

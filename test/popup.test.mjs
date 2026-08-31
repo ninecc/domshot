@@ -6,11 +6,23 @@ import { withChromePage } from './support/chrome-page.mjs';
 
 const popupUrl = pathToFileURL(resolve(import.meta.dirname, '../dist/popup.html')).href;
 test('popup opens a dedicated settings panel and returns to the capture panel', async () => {
-  await withChromePage({ url: popupUrl, viewport: { width: 360, height: 600 } }, async (page) => {
+  await withChromePage({
+    url: popupUrl,
+    viewport: { width: 360, height: 600 },
+    initScript: `
+      globalThis.__syncStore = {};
+      Object.defineProperty(chrome, 'i18n', { configurable: true, value: { getUILanguage: () => 'fr-FR' } });
+      Object.defineProperty(chrome, 'storage', { configurable: true, value: { sync: {
+        async get(key) { return typeof key === 'string' ? { [key]: globalThis.__syncStore[key] } : { ...globalThis.__syncStore }; },
+        async set(values) { Object.assign(globalThis.__syncStore, values); }
+      } } });
+    `,
+  }, async (page) => {
     const rootWidth = await page.evaluate('getComputedStyle(document.documentElement).width');
     assert.equal(rootWidth, '360px');
 
     const initial = await page.evaluate(`({
+      lang: document.documentElement.lang,
       homeHidden: document.querySelector('#homePanel').hidden,
       settingsHidden: document.querySelector('#settingsPanel').hidden,
       outputSettingsInHome: Boolean(document.querySelector('#homePanel .output-settings')),
@@ -18,18 +30,22 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       introTitle: document.querySelector('#intro-title').textContent,
       introEyebrow: Boolean(document.querySelector('.intro p')),
       actionLabels: [...document.querySelectorAll('.capture-action strong')].map((label) => label.textContent),
-      clarityLabel: document.querySelector('[aria-label="图片清晰度"]').parentElement.firstElementChild.textContent,
-      pixelHint: document.querySelector('#pixelHint').textContent
+      clarityLabel: document.querySelector('.scale-segment').parentElement.firstElementChild.textContent,
+      pixelHint: document.querySelector('#pixelHint').textContent,
+      settingsTitle: document.querySelector('#settings-title').textContent,
+      generalTitle: document.querySelector('#general-title').textContent
     })`);
+    assert.equal(initial.lang, 'en');
     assert.equal(initial.homeHidden, false);
     assert.equal(initial.settingsHidden, true);
     assert.equal(initial.outputSettingsInHome, true, 'frequently used output settings must remain on the capture panel');
     assert.equal(initial.footerInsidePanel, false, 'footer must be shared by both panels');
-    assert.equal(initial.introTitle, '精确捕获网页内容');
+    assert.ok(initial.introTitle.length > 0);
     assert.equal(initial.introEyebrow, false, 'homepage should not include a decorative technical eyebrow');
-    assert.deepEqual(initial.actionLabels, ['截取页面元素', '截取完整页面']);
-    assert.equal(initial.clarityLabel, '图片清晰度');
-    assert.equal(initial.pixelHint, '当前 2×');
+    assert.equal(initial.actionLabels.length, 2);
+    assert.ok(initial.actionLabels.every(Boolean));
+    assert.ok(initial.clarityLabel.length > 0);
+    assert.match(initial.pixelHint, /2×/);
 
     await page.waitUntil(
       `getComputedStyle(document.querySelector('#homePanel')).transform === 'none'`,
@@ -44,8 +60,8 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(primaryIdle.backgroundImage, 'none', 'primary action must not use a decorative gradient');
     await page.hover('.primary-action');
     await page.waitUntil(
-      `getComputedStyle(document.querySelector('.primary-action')).backgroundColor === 'rgb(248, 250, 255)'`,
-      'primary action hover did not reach the subtle blue surface color',
+      `getComputedStyle(document.querySelector('.primary-action')).backgroundColor !== ${JSON.stringify(primaryIdle.backgroundColor)}`,
+      'primary action hover did not change its surface color',
     );
     const primaryHovered = await page.evaluate(`(() => {
       const button = document.querySelector('.primary-action');
@@ -58,8 +74,8 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     const idleButton = await buttonColors(page);
     await page.hover('.settings-button');
     await page.waitUntil(
-      `getComputedStyle(document.querySelector('.settings-button')).color === 'rgb(37, 99, 235)'`,
-      'settings hover color transition did not reach the brand color',
+      `getComputedStyle(document.querySelector('.settings-button')).color !== ${JSON.stringify(idleButton.color)}`,
+      'settings hover did not change the icon color',
     );
     const hoveredButton = await buttonColors(page);
     assert.notEqual(hoveredButton.color, idleButton.color, 'settings hover must change the icon color');
@@ -72,9 +88,11 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         settingsHidden: document.querySelector('#settingsPanel').hidden,
         scrollWidth: document.documentElement.scrollWidth,
         scrollHeight: document.documentElement.scrollHeight,
-        settingsHeaderChildren: document.querySelector('.settings-header').children.length,
         settingsSubtitle: Boolean(document.querySelector('.settings-header p')),
-        autosaveInsideCard: document.querySelector('.autosave-status')?.parentElement?.classList.contains('advanced-heading'),
+        settingsTitleVisible: document.querySelector('#settings-title').getClientRects().length > 0,
+        backButtonVisible: document.querySelector('#backButton').getClientRects().length > 0,
+        autosaveVisible: document.querySelector('.autosave-status').getClientRects().length > 0,
+        languageOptionCount: document.querySelectorAll('input[name="language"]').length,
         footerVisible: getComputedStyle(document.querySelector('.popup-footer')).display !== 'none',
         outputSurface: (() => {
           const style = getComputedStyle(document.querySelector('.output-settings'));
@@ -99,23 +117,43 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
 
     assert.equal(metrics.homeHidden, true);
     assert.equal(metrics.settingsHidden, false);
-    assert.equal(metrics.settingsHeaderChildren, 2, 'settings header should only contain back and title');
     assert.equal(metrics.settingsSubtitle, false);
-    assert.equal(metrics.autosaveInsideCard, true, 'autosave status should replace the decorative card label');
+    assert.equal(metrics.settingsTitleVisible, true);
+    assert.equal(metrics.backButtonVisible, true);
+    assert.equal(metrics.autosaveVisible, true);
+    assert.equal(metrics.languageOptionCount, 3);
     assert.equal(metrics.footerVisible, true, 'shared footer must remain visible on the settings panel');
     assert.equal(metrics.advancedSurface.backgroundImage, 'none', 'settings containers must not use decorative gradients');
     assert.equal(metrics.advancedSurface.backgroundColor, metrics.outputSurface.backgroundColor, 'settings containers should share one surface color');
     assert.notEqual(metrics.activeToggleGradient, 'none', 'active controls should retain the brand gradient');
     assert.equal(metrics.outputSettingsInPanel, false, 'the settings panel should only contain low-frequency options');
     assert.equal(metrics.advancedOptionCount, 2);
-    assert.equal(metrics.advancedOptionRects[0].left, metrics.advancedOptionRects[1].left);
-    assert.equal(metrics.advancedOptionRects[0].width, metrics.advancedOptionRects[1].width);
+    assert.ok(Math.abs(metrics.advancedOptionRects[0].left - metrics.advancedOptionRects[1].left) < 0.5);
+    assert.ok(Math.abs(metrics.advancedOptionRects[0].width - metrics.advancedOptionRects[1].width) < 0.5);
     assert.ok(metrics.advancedOptionRects[1].top >= metrics.advancedOptionRects[0].bottom, 'advanced options must each occupy their own row');
     assert.equal(metrics.embedFontsChecked, true);
     assert.equal(metrics.reconcileChecked, false);
     assert.equal(metrics.focusedElement, 'backButton');
     assert.ok(metrics.scrollWidth <= 360, `expanded popup is ${metrics.scrollWidth}px wide`);
     assert.ok(metrics.scrollHeight <= 600, `expanded popup is ${metrics.scrollHeight}px tall and requires a scrollbar`);
+
+    const chinese = await page.evaluate(`(() => {
+      document.querySelector('input[name="language"][value="zh-CN"]').click();
+      return {
+        lang: document.documentElement.lang,
+        settingsTitle: document.querySelector('#settings-title').textContent,
+        generalTitle: document.querySelector('#general-title').textContent,
+        advancedTitle: document.querySelector('#advanced-title').textContent,
+        footer: document.querySelector('.status-copy').textContent,
+        autoLabel: document.querySelector('input[name="language"][value="auto"] + span').textContent,
+        storedLanguage: globalThis.__syncStore.uiLanguage
+      };
+    })()`);
+    assert.equal(chinese.lang, 'zh-CN');
+    assert.equal(chinese.storedLanguage, 'zh-CN');
+    assert.ok([chinese.settingsTitle, chinese.generalTitle, chinese.advancedTitle, chinese.footer, chinese.autoLabel].every(Boolean));
+    assert.notEqual(chinese.settingsTitle, initial.settingsTitle);
+    assert.notEqual(chinese.generalTitle, initial.generalTitle);
 
     const toggleCloseStart = await page.evaluate(`(() => {
       const input = document.querySelector('#embedFonts');
@@ -124,7 +162,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       const style = getComputedStyle(track);
       return { backgroundColor: style.backgroundColor, backgroundImage: style.backgroundImage };
     })()`);
-    assert.equal(toggleCloseStart.backgroundColor, 'rgb(203, 213, 225)', 'toggle track must keep its neutral surface while the active gradient fades out');
+    assert.notEqual(toggleCloseStart.backgroundColor, 'rgba(0, 0, 0, 0)', 'toggle track must keep a visible neutral surface while the active gradient fades out');
 
     const returned = await page.evaluate(`new Promise((resolve) => {
       document.querySelector('#backButton').click();

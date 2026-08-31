@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "DOMShot"
+  },
+  "extensionDescription": {
+    "message": "将网页元素或完整页面高保真截取为图片。Powered by SnapDOM。"
+  }
+}

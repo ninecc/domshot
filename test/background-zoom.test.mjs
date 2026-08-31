@@ -86,15 +86,16 @@ test('background resolves permitted images and persists an exact-origin permissi
     type: 'DOMSHOT_PREPARE_IMAGE_PERMISSION',
     token: 'retry-1',
     origins: ['https://blocked.example', 'https://blocked.example'],
+    locale: 'en',
   }, { tab: { id: 27 } });
   assert.equal(prepared.prepared, true);
-  assert.match(prepared.frameUrl, /permission\.html\?mode=inline&token=retry-1$/);
+  assertPermissionUrl(prepared.frameUrl, { mode: 'inline', lang: 'en', token: 'retry-1' });
   const pending = await invokeMessage(onMessage, { type: 'DOMSHOT_GET_IMAGE_PERMISSION', token: 'retry-1' });
   assert.deepEqual(Array.from(pending.patterns), ['https://blocked.example/*']);
 
   const opened = await invokeMessage(onMessage, { type: 'DOMSHOT_OPEN_IMAGE_PERMISSION', token: 'retry-1' });
   assert.equal(opened.opened, true);
-  assert.match(openedWindow.url, /permission\.html\?token=retry-1$/);
+  assertPermissionUrl(openedWindow.url, { lang: 'en', token: 'retry-1' });
 
   allowedPatterns.add('https://blocked.example/*');
   const completed = await invokeMessage(onMessage, { type: 'DOMSHOT_COMPLETE_IMAGE_PERMISSION', token: 'retry-1' });
@@ -107,4 +108,10 @@ function invokeMessage(listener, message, sender = {}) {
   return new Promise((resolve) => {
     assert.equal(listener(message, sender, resolve), true);
   });
+}
+
+function assertPermissionUrl(value, expectedParams) {
+  const url = new URL(value);
+  assert.equal(url.pathname, '/permission.html');
+  for (const [name, expected] of Object.entries(expectedParams)) assert.equal(url.searchParams.get(name), expected);
 }

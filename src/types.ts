@@ -1,4 +1,6 @@
 export type CaptureFormat = 'png' | 'jpg' | 'webp';
+export type UiLocale = 'en' | 'zh-CN';
+export type LanguagePreference = 'auto' | UiLocale;
 
 export interface CaptureSettings {
   format: CaptureFormat;
@@ -7,7 +9,7 @@ export interface CaptureSettings {
   reconcile: boolean;
 }
 
-export const CONTENT_SCRIPT_PROTOCOL = 3;
+export const CONTENT_SCRIPT_PROTOCOL = 4;
 
 export interface ResolvedImageResource {
   url: string;
@@ -18,10 +20,10 @@ export interface ResolvedImageResource {
 export type ExtensionMessage =
   | { type: 'DOMSHOT_PING' }
   | { type: 'DOMSHOT_ZOOM_CHANGED'; pageZoom: number }
-  | { type: 'DOMSHOT_SELECT'; settings: CaptureSettings; pageZoom: number }
-  | { type: 'DOMSHOT_FULL_PAGE'; settings: CaptureSettings; pageZoom: number }
+  | { type: 'DOMSHOT_SELECT'; settings: CaptureSettings; pageZoom: number; locale: UiLocale }
+  | { type: 'DOMSHOT_FULL_PAGE'; settings: CaptureSettings; pageZoom: number; locale: UiLocale }
   | { type: 'DOMSHOT_RESOLVE_IMAGES'; urls: string[] }
-  | { type: 'DOMSHOT_PREPARE_IMAGE_PERMISSION'; token: string; origins: string[] }
+  | { type: 'DOMSHOT_PREPARE_IMAGE_PERMISSION'; token: string; origins: string[]; locale: UiLocale }
   | { type: 'DOMSHOT_OPEN_IMAGE_PERMISSION'; token: string }
   | { type: 'DOMSHOT_GET_IMAGE_PERMISSION'; token: string }
   | { type: 'DOMSHOT_COMPLETE_IMAGE_PERMISSION'; token: string }

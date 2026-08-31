@@ -12,6 +12,7 @@ await Promise.all([
   cp(resolve(root, 'public/manifest.json'), resolve(outdir, 'manifest.json')),
   cp(resolve(root, 'public/popup.html'), resolve(outdir, 'popup.html')),
   cp(resolve(root, 'public/permission.html'), resolve(outdir, 'permission.html')),
+  cp(resolve(root, 'public/_locales'), resolve(outdir, '_locales'), { recursive: true }),
   cp(resolve(root, 'LICENSE'), resolve(outdir, 'LICENSE.txt')),
   cp(resolve(root, 'THIRD_PARTY_NOTICES.md'), resolve(outdir, 'third-party-licenses.txt')),
   ...[16, 32, 48, 128].map((size) => cp(resolve(root, `public/icon${size}.png`), resolve(outdir, `icon${size}.png`))),

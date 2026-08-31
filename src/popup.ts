@@ -1,5 +1,7 @@
 import type { CaptureSettings, ExtensionMessage } from './types';
 import { CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
+import type { LanguagePreference, UiLocale } from './types';
+import { loadLanguagePreference, localizeDocument, resolveLocale, saveLanguagePreference, t } from './i18n';
 import './popup.css';
 
 const status = document.querySelector<HTMLElement>('#status')!;
@@ -12,6 +14,7 @@ const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButto
 const backButton = document.querySelector<HTMLButtonElement>('#backButton')!;
 const homePanel = document.querySelector<HTMLElement>('#homePanel')!;
 const settingsPanel = document.querySelector<HTMLElement>('#settingsPanel')!;
+let activeLocale: UiLocale = resolveLocale('auto');
 
 function chosen<T extends string>(name: string): T {
   return document.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)!.value as T;
@@ -26,6 +29,10 @@ function readSettings(): CaptureSettings {
   };
 }
 
+function readLanguagePreference(): LanguagePreference {
+  return chosen<LanguagePreference>('language');
+}
+
 function applySettings(settings: CaptureSettings) {
   const format = document.querySelector<HTMLInputElement>(`input[name="format"][value="${settings.format}"]`);
   const scale = document.querySelector<HTMLInputElement>(`input[name="scale"][value="${settings.scale}"]`);
@@ -33,13 +40,21 @@ function applySettings(settings: CaptureSettings) {
   if (scale) scale.checked = true;
   embedFonts.checked = settings.embedFonts;
   reconcile.checked = settings.reconcile;
-  pixelHint.textContent = `当前 ${settings.scale}×`;
+  pixelHint.textContent = t(activeLocale, 'currentScale', { scale: settings.scale });
+}
+
+function applyLanguagePreference(preference: LanguagePreference) {
+  const input = document.querySelector<HTMLInputElement>(`input[name="language"][value="${preference}"]`);
+  if (input) input.checked = true;
+  activeLocale = resolveLocale(preference);
+  localizeDocument(activeLocale);
+  pixelHint.textContent = t(activeLocale, 'currentScale', { scale: readSettings().scale });
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url || /^(chrome|edge|about|view-source):/.test(tab.url)) {
-    throw new Error('当前页面受浏览器保护，无法截图');
+    throw new Error(t(activeLocale, 'protectedPage'));
   }
   return tab;
 }
@@ -52,34 +67,42 @@ async function ensureContentScript(tabId: number) {
 
   await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
   const response = await chrome.tabs.sendMessage(tabId, { type: 'DOMSHOT_PING' } satisfies ExtensionMessage) as { protocol?: number } | undefined;
-  if (response?.protocol !== CONTENT_SCRIPT_PROTOCOL) throw new Error('页面中的 DOMShot 脚本未能更新，请刷新页面后重试');
+  if (response?.protocol !== CONTENT_SCRIPT_PROTOCOL) throw new Error(t(activeLocale, 'scriptRefresh'));
 }
 
 async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_FULL_PAGE') {
   const button = type === 'DOMSHOT_SELECT' ? selectButton : pageButton;
   const settings = readSettings();
   button.disabled = true;
-  status.textContent = type === 'DOMSHOT_SELECT' ? '正在打开取景器…' : '正在准备整个页面…';
+  status.textContent = t(activeLocale, type === 'DOMSHOT_SELECT' ? 'openingViewfinder' : 'preparingPage');
 
   try {
     await chrome.storage.sync.set({ captureSettings: settings });
     const tab = await getActiveTab();
     const pageZoom = await chrome.tabs.getZoom(tab.id!);
     await ensureContentScript(tab.id!);
-    await chrome.tabs.sendMessage(tab.id!, { type, settings, pageZoom } satisfies ExtensionMessage);
+    await chrome.tabs.sendMessage(tab.id!, { type, settings, pageZoom, locale: activeLocale } satisfies ExtensionMessage);
     window.close();
   } catch (error) {
     button.disabled = false;
-    status.textContent = error instanceof Error ? error.message : '无法在当前页面运行';
+    status.textContent = error instanceof Error ? error.message : t(activeLocale, 'cannotRun');
     status.classList.add('is-error');
   }
 }
 
-document.querySelectorAll<HTMLInputElement>('input').forEach((input) => {
+document.querySelectorAll<HTMLInputElement>('input:not([name="language"])').forEach((input) => {
   input.addEventListener('change', async () => {
     const settings = readSettings();
-    pixelHint.textContent = `当前 ${settings.scale}×`;
+    pixelHint.textContent = t(activeLocale, 'currentScale', { scale: settings.scale });
     await chrome.storage.sync.set({ captureSettings: settings });
+  });
+});
+
+document.querySelectorAll<HTMLInputElement>('input[name="language"]').forEach((input) => {
+  input.addEventListener('change', () => {
+    const preference = readLanguagePreference();
+    applyLanguagePreference(preference);
+    void saveLanguagePreference(preference);
   });
 });
 
@@ -96,6 +119,11 @@ backButton.addEventListener('click', () => {
   requestAnimationFrame(() => settingsButton.focus());
 });
 
-chrome.storage.sync.get('captureSettings').then(({ captureSettings }) => {
+void Promise.all([
+  chrome.storage.sync.get('captureSettings').catch(() => ({})),
+  loadLanguagePreference(),
+]).then(([stored, languagePreference]) => {
+  const captureSettings = (stored as Record<string, unknown>).captureSettings as Partial<CaptureSettings> | undefined;
+  applyLanguagePreference(languagePreference);
   applySettings({ ...DEFAULT_SETTINGS, ...(captureSettings ?? {}) });
 });

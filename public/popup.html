@@ -8,55 +8,60 @@
   </head>
   <body>
     <main class="shell">
-      <section class="panel home-panel" id="homePanel" aria-label="截图主页">
+      <section class="panel home-panel" id="homePanel" aria-label="Capture home" data-i18n-aria-label="homeAria">
         <header class="masthead">
           <div class="brand" aria-label="DOMShot">
             <img class="brand-mark" src="icon128.png" alt="" aria-hidden="true" />
             <span class="wordmark">DOM<span>Shot</span></span>
           </div>
-          <button class="settings-button" id="settingsButton" type="button" aria-label="打开设置" aria-controls="settingsPanel">
+          <button class="settings-button" id="settingsButton" type="button" aria-label="Open settings" aria-controls="settingsPanel" data-i18n-aria-label="openSettings">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
           </button>
         </header>
 
-        <section class="intro" aria-labelledby="intro-title"><h1 id="intro-title">精确捕获网页内容</h1><span>保留原有样式、字体与布局细节</span></section>
+        <section class="intro" aria-labelledby="intro-title"><h1 id="intro-title" data-i18n="introTitle">Capture web content precisely</h1><span data-i18n="introSubtitle">Preserve original styles, fonts, and layout details</span></section>
 
-        <section class="actions" aria-label="截图操作">
-          <button class="capture-action primary-action" id="selectElement" type="button"><span class="action-symbol frame-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong>截取页面元素</strong><small>悬停选择元素，单击即可截图</small></span><span class="chevron" aria-hidden="true">›</span></button>
-          <button class="capture-action secondary-action" id="capturePage" type="button"><span class="action-symbol page-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong>截取完整页面</strong><small>保存当前页面的全部内容</small></span><span class="chevron" aria-hidden="true">›</span></button>
+        <section class="actions" aria-label="Capture actions" data-i18n-aria-label="captureActions">
+          <button class="capture-action primary-action" id="selectElement" type="button"><span class="action-symbol frame-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong data-i18n="selectElement">Capture page element</strong><small data-i18n="selectElementDesc">Hover to select an element, then click to capture</small></span><span class="chevron" aria-hidden="true">›</span></button>
+          <button class="capture-action secondary-action" id="capturePage" type="button"><span class="action-symbol page-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong data-i18n="capturePage">Capture full page</strong><small data-i18n="capturePageDesc">Save all content on the current page</small></span><span class="chevron" aria-hidden="true">›</span></button>
         </section>
 
         <section class="output-settings" aria-labelledby="output-title">
-          <div class="section-heading"><h2 id="output-title">输出设置</h2><span id="pixelHint">当前 2×</span></div>
-          <div class="setting-row"><span>图片格式</span><div class="segment" role="radiogroup" aria-label="图片格式"><label><input type="radio" name="format" value="png" checked /><span>PNG</span></label><label><input type="radio" name="format" value="jpg" /><span>JPG</span></label><label><input type="radio" name="format" value="webp" /><span>WebP</span></label></div></div>
-          <div class="setting-row"><span>图片清晰度</span><div class="segment scale-segment" role="radiogroup" aria-label="图片清晰度"><label><input type="radio" name="scale" value="1" /><span>1×</span></label><label><input type="radio" name="scale" value="2" checked /><span>2×</span></label><label><input type="radio" name="scale" value="3" /><span>3×</span></label></div></div>
+          <div class="section-heading"><h2 id="output-title" data-i18n="outputSettings">Output</h2><span id="pixelHint">Current 2×</span></div>
+          <div class="setting-row"><span data-i18n="imageFormat">Image format</span><div class="segment" role="radiogroup" aria-label="Image format" data-i18n-aria-label="imageFormat"><label><input type="radio" name="format" value="png" checked /><span>PNG</span></label><label><input type="radio" name="format" value="jpg" /><span>JPG</span></label><label><input type="radio" name="format" value="webp" /><span>WebP</span></label></div></div>
+          <div class="setting-row"><span data-i18n="imageClarity">Image quality</span><div class="segment scale-segment" role="radiogroup" aria-label="Image quality" data-i18n-aria-label="imageClarity"><label><input type="radio" name="scale" value="1" /><span>1×</span></label><label><input type="radio" name="scale" value="2" checked /><span>2×</span></label><label><input type="radio" name="scale" value="3" /><span>3×</span></label></div></div>
         </section>
 
       </section>
 
       <section class="panel settings-panel" id="settingsPanel" aria-labelledby="settings-title" hidden>
         <header class="settings-header">
-          <button class="back-button" id="backButton" type="button" aria-label="返回截图主页">
+          <button class="back-button" id="backButton" type="button" aria-label="Back to capture home" data-i18n-aria-label="backHome">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
           </button>
-          <h1 id="settings-title">设置</h1>
+          <h1 id="settings-title" data-i18n="settings">Settings</h1>
         </header>
 
-        <section class="advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
-          <div class="advanced-heading"><h2 id="advanced-title">高级设置</h2><span class="autosave-status"><b aria-hidden="true">✓</b> 自动保存</span></div>
+        <section class="settings-group general-settings" aria-labelledby="general-title">
+          <div class="advanced-heading"><h2 id="general-title" data-i18n="generalSettings">General</h2></div>
+          <div class="setting-row language-row"><span data-i18n="language">Language</span><div class="segment language-segment" role="radiogroup" aria-label="Language" data-i18n-aria-label="language"><label><input type="radio" name="language" value="auto" checked /><span data-i18n="followBrowser">Browser</span></label><label><input type="radio" name="language" value="zh-CN" /><span data-i18n="chinese">中文</span></label><label><input type="radio" name="language" value="en" /><span data-i18n="english">English</span></label></div></div>
+        </section>
+
+        <section class="settings-group advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
+          <div class="advanced-heading"><h2 id="advanced-title" data-i18n="advancedSettings">Advanced</h2><span class="autosave-status"><b aria-hidden="true">✓</b> <span data-i18n="autosave">Auto-saved</span></span></div>
           <div class="advanced-options">
-            <label class="toggle-row"><span><strong>嵌入网页字体</strong><small>提升自定义字体还原度，处理时间更长</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
-            <label class="toggle-row"><span><strong>精确布局校准</strong><small>减少换行和布局偏差，处理时间约翻倍</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="embedFonts">Embed web fonts</strong><small data-i18n="embedFontsDesc">Improves custom font fidelity but takes longer</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="reconcile">Precise layout calibration</strong><small data-i18n="reconcileDesc">Reduces wrapping and layout shifts but roughly doubles processing time</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
           </div>
         </section>
       </section>
 
       <footer class="popup-footer">
-        <p class="status" id="status" role="status"><span aria-hidden="true">●</span> 准备就绪 · 图片仅在本地处理</p>
+        <p class="status" id="status" role="status"><span aria-hidden="true">●</span> <span class="status-copy" data-i18n="readyLocal">Ready · Images are processed locally</span></p>
         <div class="attribution">
           Powered by <a href="https://snapdom.dev" target="_blank" rel="noreferrer noopener">SnapDOM</a>
           <span aria-hidden="true">·</span>
-          <a href="third-party-licenses.txt" target="_blank">第三方许可</a>
+          <a href="third-party-licenses.txt" target="_blank" data-i18n="thirdPartyLicenses">Third-party licenses</a>
         </div>
       </footer>
     </main>

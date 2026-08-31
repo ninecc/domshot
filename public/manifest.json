@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "DOMShot",
-  "description": "选择网页元素并高保真导出图片。Powered by SnapDOM。",
+  "name": "__MSG_extensionName__",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "en",
   "version": "0.1.0",
   "action": {
-    "default_title": "DOMShot",
+    "default_title": "__MSG_extensionName__",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icon16.png",

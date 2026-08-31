@@ -1,6 +1,6 @@
 import puppeteer from 'puppeteer-core';
 
-export async function withChromePage({ url, viewport = { width: 800, height: 600 } }, run) {
+export async function withChromePage({ url, viewport = { width: 800, height: 600 }, initScript }, run) {
   const browser = await puppeteer.launch({
     headless: true,
     defaultViewport: viewport,
@@ -12,6 +12,7 @@ export async function withChromePage({ url, viewport = { width: 800, height: 600
   try {
     const [page] = await browser.pages();
     await page.setViewport(viewport);
+    if (initScript) await page.evaluateOnNewDocument(initScript);
     await page.goto(url, { waitUntil: 'load' });
     const cdp = await page.createCDPSession();
     return await run({

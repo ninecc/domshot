@@ -1,32 +1,32 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>允许加载图片来源 · DOMShot</title>
+    <title data-i18n="permissionDocumentTitle">Allow image sources · DOMShot</title>
     <link rel="stylesheet" href="permission.css" />
   </head>
   <body>
     <main class="permission-shell">
       <header class="permission-head">
         <img src="icon128.png" alt="" aria-hidden="true" />
-        <span>DOMShot · 图片访问</span>
+        <span data-i18n="permissionBrand">DOMShot · Image access</span>
       </header>
       <section class="permission-copy" aria-labelledby="permission-title">
         <span class="permission-mark" aria-hidden="true">↗</span>
-        <p class="eyebrow">仅用于本次截图所需来源</p>
-        <h1 id="permission-title">允许加载跨域图片</h1>
-        <p>浏览器阻止了以下图片来源。授权后，DOMShot 会在本机读取图片并立即重新截图。</p>
+        <p class="eyebrow" data-i18n="permissionEyebrow">Only for sources needed by this capture</p>
+        <h1 id="permission-title" data-i18n="permissionHeading">Allow cross-origin images</h1>
+        <p data-i18n="permissionIntro">The browser blocked the image sources below. Once allowed, DOMShot will read them locally and retry the capture.</p>
       </section>
       <section class="origin-panel" aria-labelledby="origin-title">
-        <div class="origin-heading"><h2 id="origin-title">待授权来源</h2><span id="originCount">0 个</span></div>
+        <div class="origin-heading"><h2 id="origin-title" data-i18n="pendingOrigins">Sources awaiting permission</h2><span id="originCount">0 sources</span></div>
         <ul id="originList"></ul>
       </section>
-      <div class="privacy-note"><strong>图片不会上传</strong><span>不携带登录 Cookie，不保存图片内容或浏览记录。</span></div>
+      <div class="privacy-note"><strong data-i18n="privacyTitle">Images are never uploaded</strong><span data-i18n="privacyBody">Login cookies are not sent, and image content or browsing history is not stored.</span></div>
       <p class="permission-status" id="permissionStatus" role="status"></p>
       <div class="permission-actions">
-        <button class="cancel" id="cancelPermission" type="button">暂不授权</button>
-        <button class="grant" id="grantPermission" type="button" disabled>允许并重新截图</button>
+        <button class="cancel" id="cancelPermission" type="button" data-i18n="notNow">Not now</button>
+        <button class="grant" id="grantPermission" type="button" disabled data-i18n="allowRetry">Allow and retry</button>
       </div>
     </main>
     <script src="permission.js"></script>
