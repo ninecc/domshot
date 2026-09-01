@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "changed",
+  "scope": "popup",
+  "summary": "Keep quick output controls on the home screen while extended preferences live in a dedicated settings panel"
+}

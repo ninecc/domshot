@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "added",
+  "scope": "settings",
+  "summary": "Configure post-capture actions, image quality, file naming, delay, shadows, fonts, layout calibration, and image optimization"
+}
