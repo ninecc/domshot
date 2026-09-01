@@ -33,6 +33,8 @@ test('background forwards tab zoom changes to the injected content script', asyn
   assert.equal(messages[0].tabId, 42);
   assert.equal(messages[0].message.type, 'DOMSHOT_ZOOM_CHANGED');
   assert.equal(messages[0].message.pageZoom, 0.33);
+  const ready = await invokeMessage(onMessage, { type: 'DOMSHOT_BACKGROUND_PING' });
+  assert.equal(ready.protocol, 1);
 });
 
 test('background resolves permitted images and persists an exact-origin permission request', async () => {
