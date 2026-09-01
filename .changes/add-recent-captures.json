@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "added",
+  "scope": "history",
+  "summary": "Keep up to 10 recent captures locally, with per-capture controls for saving, removing, previewing, copying, and downloading"
+}

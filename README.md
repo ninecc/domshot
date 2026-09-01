@@ -13,6 +13,8 @@ DOMShot is a Chrome Manifest V3 extension for capturing individual DOM elements 
 - Capture one element or the complete page DOM.
 - Export PNG, JPG, or WebP at 1×, 2×, or 3× scale.
 - Preview, copy, and download images without leaving the page.
+- Keep up to 10 recent captures locally for previewing, copying, downloading, or deleting; the oldest capture is removed automatically when the limit is reached.
+- Exclude the current capture from Recent captures from its preview or post-copy/download notice, with an option to restore it while the preview remains open.
 - Keep extension UI stable across browser page zoom and pinch zoom.
 - Process images locally in the browser without uploading them.
 
@@ -50,7 +52,7 @@ Settings are saved automatically.
 
 ## Privacy and permissions
 
-DOMShot does not request persistent access to every website and contains no telemetry or image-upload service.
+DOMShot does not request persistent access to every website and contains no telemetry or image-upload service. Recent captures stay in local browser storage, are removed when the extension is uninstalled, and can be cleared at any time from Recent captures.
 
 - `activeTab`: access the current tab after a user action.
 - `scripting`: inject the capture script when requested.
