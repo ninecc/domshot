@@ -14,9 +14,14 @@
             <img class="brand-mark" src="icon128.png" alt="" aria-hidden="true" />
             <span class="wordmark">DOM<span>Shot</span></span>
           </div>
+          <div class="masthead-actions">
+          <button class="history-button" id="historyButton" type="button" aria-label="Open recent captures" aria-controls="historyPanel" data-i18n-aria-label="openHistory">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4m0 4h4"/><path d="M4.8 7.2A8.5 8.5 0 1 1 3.6 14"/><path d="M12 7.5V12l3 2"/></svg><span class="history-badge" id="historyBadge" hidden>0</span>
+          </button>
           <button class="settings-button" id="settingsButton" type="button" aria-label="Open settings" aria-controls="settingsPanel" data-i18n-aria-label="openSettings">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
           </button>
+          </div>
         </header>
 
         <section class="intro" aria-labelledby="intro-title"><h1 id="intro-title" data-i18n="introTitle">Capture web content precisely</h1><span data-i18n="introSubtitle">Preserve original styles, fonts, and layout details</span></section>
@@ -34,6 +39,24 @@
           <div class="setting-row" id="qualityRow" hidden><span data-i18n="lossyQuality">File quality</span><div class="segment quality-segment" role="radiogroup" aria-label="File quality" data-i18n-aria-label="lossyQuality"><label><input type="radio" name="quality" value="0.8" aria-label="Compact quality, 80%" data-i18n-aria-label="compactQualityLabel" /><span><strong data-i18n="compactQuality">Compact</strong><small>80%</small></span></label><label><input type="radio" name="quality" value="0.92" aria-label="Standard quality, 92%" data-i18n-aria-label="standardQualityLabel" checked /><span><strong data-i18n="standardQuality">Standard</strong><small>92%</small></span></label><label><input type="radio" name="quality" value="1" aria-label="Maximum quality, 100%" data-i18n-aria-label="maximumQualityLabel" /><span><strong data-i18n="maximumQuality">Max</strong><small>100%</small></span></label></div></div>
         </section>
 
+      </section>
+
+      <section class="panel history-panel" id="historyPanel" aria-labelledby="history-title" hidden>
+        <header class="settings-header history-header">
+          <button class="back-button" id="historyBackButton" type="button" aria-label="Back to capture home" data-i18n-aria-label="backHome"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+          <h1 id="history-title" data-i18n="recentCaptures">Recent captures</h1>
+          <button class="clear-history" id="clearHistoryButton" type="button" data-i18n="clearAll" hidden>Clear all</button>
+        </header>
+        <div class="history-summary"><span data-i18n="historyLocal">Stored only in this browser</span><strong id="historyCount">0 / 10</strong></div>
+        <div class="history-list" id="historyList" aria-live="polite"></div>
+        <div class="history-empty" id="historyEmpty"><span class="empty-frame" aria-hidden="true"><i></i></span><strong data-i18n="noRecentCaptures">No recent captures</strong><small data-i18n="historyEmptyHint">Captures are saved here automatically, ready to copy or download again.</small></div>
+        <section class="history-detail" id="historyDetail" aria-label="Capture preview" data-i18n-aria-label="historyPreview" hidden>
+          <header class="detail-header"><button class="back-button" id="detailBackButton" type="button" data-i18n-aria-label="backHistory" aria-label="Back to recent captures"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><strong id="detailTitle"></strong><button class="detail-delete" id="detailDeleteButton" type="button" data-i18n-aria-label="deleteCapture" aria-label="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9 7V4.8h6V7m-8 0 .7 12h8.6L17 7M10 10.5v5M14 10.5v5"/></svg></button></header>
+          <div class="detail-stage"><img id="detailImage" alt="" /></div>
+          <div class="detail-meta" id="detailMeta"></div>
+          <div class="detail-actions"><button id="detailCopyButton" type="button" data-capture-action="copy" data-i18n="copyImage">Copy image</button><button id="detailDownloadButton" type="button" data-capture-action="download" data-i18n="downloadImage">Download</button></div>
+          <span class="action-status" aria-live="polite" aria-atomic="true"></span>
+        </section>
       </section>
 
       <section class="panel settings-panel" id="settingsPanel" aria-labelledby="settings-title" hidden>

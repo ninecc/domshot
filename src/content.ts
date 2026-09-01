@@ -4,6 +4,9 @@ import type { CaptureFormat, CaptureSettings, ExtensionMessage, ResolvedImageRes
 import { CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import { plural, resolveLocale, t } from './i18n';
 import { resolveTheme } from './theme';
+import { bindCaptureResultActions, copyCaptureResult, downloadCaptureResult } from './capture-result';
+import type { CaptureResultAsset } from './capture-result';
+import { CaptureHistorySession } from './history-client';
 
 declare global {
   interface Window {
@@ -219,6 +222,15 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
     const blob = await imageToBlob(image, settings.format, locale);
     const filename = captureFilename(settings.filenameMode, label, settings.format, target === document.documentElement);
     progress.remove();
+    const asset: CaptureResultAsset = { blob, format: settings.format, filename };
+    const historySession = new CaptureHistorySession({
+      createdAt: Date.now(), label, filename, format: settings.format,
+      width: image.naturalWidth, height: image.naturalHeight, scale: settings.scale, size: blob.size,
+      sourceHost: location.hostname, thumbnailDataUrl: createHistoryThumbnail(image), blob,
+    });
+    await historySession.save().catch(() => {
+      // History is optional; a storage failure must not discard a successful capture.
+    });
     const previewOptions = {
       image,
       blob,
@@ -230,26 +242,37 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       locale,
       theme,
       filename,
+      historySession,
       retry: { target, settings, label, locale, theme, clip },
     };
     if (imageResources.failedCount() > 0 || settings.afterCapture === 'preview') {
       showPreview(previewOptions);
     } else if (settings.afterCapture === 'copy') {
       try {
-        const announcement = await copyImageToClipboard(image, blob, settings.format, locale);
-        showToast(announcement, theme);
+        const announcement = await copyCaptureResult(asset, locale);
+        showToast(announcement, theme, historyToastAction(historySession, locale));
       } catch {
         showPreview({ ...previewOptions, initialCopyFailure: true });
       }
     } else {
-      downloadBlob(blob, filename);
-      showToast(t(locale, 'downloadStarted'), theme);
+      downloadCaptureResult(asset);
+      showToast(t(locale, 'downloadStarted'), theme, historyToastAction(historySession, locale));
     }
   } catch (error) {
     progress.remove();
     showError(error instanceof Error ? error.message : t(locale, 'pageResourceFailed'), locale, theme);
   }
 }
+
+function createHistoryThumbnail(image: HTMLImageElement): string {
+  const ratio = Math.min(280 / image.naturalWidth, 180 / image.naturalHeight, 1);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
+  canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/webp', .76);
+}
+
 
 type SnapResult = Awaited<ReturnType<typeof snapdom>>;
 
@@ -272,7 +295,7 @@ async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, local
   return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'imageEncodeFailed'))), mime, .94));
 }
 
-function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, theme, filename, retry, initialCopyFailure }: {
+function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, theme, filename, historySession, retry, initialCopyFailure }: {
   image: HTMLImageElement;
   blob: Blob;
   format: CaptureFormat;
@@ -283,6 +306,7 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   locale: UiLocale;
   theme: UiTheme;
   filename: string;
+  historySession: CaptureHistorySession;
   retry: { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; theme: UiTheme; clip: CaptureClip };
   initialCopyFailure?: boolean;
 }) {
@@ -318,9 +342,10 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
         <span>${escapeHtml(label)}</span>
         <span>${image.naturalWidth} × ${image.naturalHeight} · ${scale}× · ${size}</span>
       </div>
+      <div class="history-retention"><span class="history-retention-status"></span><button class="history-retention-toggle" type="button"></button></div>
       <div class="preview-actions">
-        <button class="copy" type="button">${t(locale, 'copyImage')}</button>
-        <button class="download" type="button">${t(locale, 'downloadFormat', { format: extension.toUpperCase() })}</button>
+        <button class="copy" type="button" data-capture-action="copy">${t(locale, 'copyImage')}</button>
+        <button class="download" type="button" data-capture-action="download">${t(locale, 'downloadFormat', { format: extension.toUpperCase() })}</button>
       </div>
       <span class="action-status" aria-live="polite" aria-atomic="true"></span>
     </aside>`;
@@ -328,6 +353,11 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   let retryToken: string | null = null;
   const resetTimers = new Map<HTMLButtonElement, number>();
   const actionStatus = shadow.querySelector<HTMLElement>('.action-status')!;
+  const resultActions = bindCaptureResultActions(shadow, {
+    locale,
+    loadAsset: async () => ({ blob, format, filename }),
+  });
+  const historyControlCleanup = bindHistoryRetention(shadow, historySession, locale);
   const showButtonState = (button: HTMLButtonElement, text: string, state: 'success' | 'error', resetText: string, announcement = text) => {
     const currentTimer = resetTimers.get(button);
     if (currentTimer !== undefined) window.clearTimeout(currentTimer);
@@ -346,6 +376,8 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
   const cleanup = () => {
     if (retryToken) void chrome.runtime.sendMessage({ type: 'DOMSHOT_CANCEL_IMAGE_PERMISSION', token: retryToken } satisfies ExtensionMessage).catch(() => {});
     resetTimers.forEach((timer) => window.clearTimeout(timer));
+    resultActions.cleanup();
+    historyControlCleanup();
     URL.revokeObjectURL(url);
     window.removeEventListener('message', onPermissionMessage);
     removeHost(host);
@@ -406,46 +438,8 @@ function showPreview({ image, blob, format, label, scale, failedImageCount, fail
     const response = await chrome.runtime.sendMessage({ type: 'DOMSHOT_OPEN_IMAGE_PERMISSION', token: retryToken } satisfies ExtensionMessage) as { opened?: boolean } | undefined;
     if (!response?.opened) showButtonState(openPermissionButton, t(locale, 'openFailed'), 'error', openPermissionLabel, t(locale, 'permissionWindowFailed'));
   });
-  const copyButton = shadow.querySelector<HTMLButtonElement>('.copy')!;
-  const copyLabel = t(locale, 'copyImage');
-  const downloadButton = shadow.querySelector<HTMLButtonElement>('.download')!;
-  const downloadLabel = t(locale, 'downloadFormat', { format: extension.toUpperCase() });
-  downloadButton.addEventListener('click', () => {
-    try {
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = filename;
-      anchor.click();
-      showButtonState(downloadButton, t(locale, 'downloaded'), 'success', downloadLabel, t(locale, 'downloadStarted'));
-    } catch {
-      showButtonState(downloadButton, t(locale, 'downloadFailed'), 'error', downloadLabel);
-    }
-  });
-  copyButton.addEventListener('click', async () => {
-    try {
-      const announcement = await copyImageToClipboard(image, blob, format, locale);
-      showButtonState(copyButton, t(locale, 'copied'), 'success', copyLabel, announcement);
-    } catch {
-      showButtonState(copyButton, t(locale, 'copyFailed'), 'error', copyLabel, t(locale, 'clipboardDenied'));
-    }
-  });
   document.documentElement.appendChild(host);
-  if (initialCopyFailure) showButtonState(copyButton, t(locale, 'copyFailed'), 'error', copyLabel, t(locale, 'copyFallback'));
-}
-
-async function copyImageToClipboard(image: HTMLImageElement, blob: Blob, format: CaptureFormat, locale: UiLocale): Promise<string> {
-  const png = format === 'png' ? blob : await toPngBlob(image, locale);
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
-  return t(locale, format === 'png' ? 'imageCopied' : 'convertedCopied');
-}
-
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  if (initialCopyFailure) resultActions.showInitialCopyFailure();
 }
 
 function captureFilename(mode: CaptureSettings['filenameMode'], label: string, format: CaptureFormat, fullPage: boolean): string {
@@ -456,12 +450,49 @@ function captureFilename(mode: CaptureSettings['filenameMode'], label: string, f
   return `domshot-${safeFilename(source)}-${stamp}.${format}`;
 }
 
-async function toPngBlob(image: HTMLImageElement, locale: UiLocale): Promise<Blob> {
-  const canvas = document.createElement('canvas');
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-  canvas.getContext('2d')!.drawImage(image, 0, 0);
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'pngConversionFailed'))), 'image/png'));
+function bindHistoryRetention(root: ParentNode, session: CaptureHistorySession, locale: UiLocale): () => void {
+  const status = root.querySelector<HTMLElement>('.history-retention-status')!;
+  const button = root.querySelector<HTMLButtonElement>('.history-retention-toggle')!;
+  let removedByUser = false;
+  const render = () => {
+    status.textContent = session.saved
+      ? `✓ ${t(locale, 'savedToRecent')}`
+      : t(locale, removedByUser ? 'notKeptInRecent' : 'historyNotSaved');
+    button.textContent = session.saved
+      ? t(locale, 'dontSaveThisCapture')
+      : t(locale, removedByUser ? 'restoreHistorySave' : 'saveToRecent');
+  };
+  const toggle = async () => {
+    button.disabled = true;
+    try {
+      if (session.saved) {
+        await session.remove();
+        removedByUser = true;
+      } else {
+        await session.save();
+        removedByUser = false;
+      }
+      render();
+    } catch {
+      status.textContent = t(locale, 'historyActionFailed');
+    } finally { button.disabled = false; }
+  };
+  button.addEventListener('click', toggle);
+  render();
+  return () => button.removeEventListener('click', toggle);
+}
+
+type ToastAction = { label: string; run: () => Promise<string> };
+
+function historyToastAction(session: CaptureHistorySession, locale: UiLocale): ToastAction | undefined {
+  if (!session.saved) return undefined;
+  return {
+    label: t(locale, 'dontSaveThisCapture'),
+    async run() {
+      await session.remove();
+      return t(locale, 'notKeptInRecent');
+    },
+  };
 }
 
 function showProgress(label: string, locale: UiLocale, theme: UiTheme): HTMLElement {
@@ -487,12 +518,22 @@ function showError(message: string, locale: UiLocale, theme: UiTheme) {
   document.documentElement.appendChild(host);
 }
 
-function showToast(message: string, theme: UiTheme) {
+function showToast(message: string, theme: UiTheme, action?: ToastAction) {
   removeExtensionUi();
   const host = createHost('toast', theme);
-  host.shadowRoot!.innerHTML = `${sharedStyles()}<style>${toastStyles()}</style><style>${themeStyles()}</style><div class="toast compact"><strong>${escapeHtml(message)}</strong></div>`;
+  host.shadowRoot!.innerHTML = `${sharedStyles()}<style>${toastStyles()}</style><style>${themeStyles()}</style><div class="toast compact"><strong>${escapeHtml(message)}</strong>${action ? `<button type="button">${escapeHtml(action.label)}</button>` : ''}</div>`;
   document.documentElement.appendChild(host);
-  window.setTimeout(() => host.remove(), 1800);
+  let timer = window.setTimeout(() => host.remove(), action ? 4200 : 1800);
+  const button = host.shadowRoot!.querySelector<HTMLButtonElement>('button');
+  button?.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      host.shadowRoot!.querySelector('strong')!.textContent = await action!.run();
+      button.remove();
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => host.remove(), 1800);
+    } catch { button.disabled = false; }
+  });
 }
 
 function createHost(kind: string, theme: UiTheme): HTMLDivElement {
@@ -661,7 +702,7 @@ function selectorMarkup(locale: UiLocale) {
 
 function previewStyles() {
   return `
-    :host{position:fixed;inset:auto;left:var(--domshot-viewport-left,0);top:var(--domshot-viewport-top,0);display:flex;box-sizing:border-box;width:var(--domshot-viewport-width,100vw);height:var(--domshot-viewport-height,100vh);align-items:flex-end;justify-content:flex-end;padding:calc(18px * var(--domshot-ui-scale,1))}.preview-card{width:336px;flex:none;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);transform:scale(var(--domshot-ui-scale,1));transform-origin:right bottom;pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.status-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.has-resource-warning .status-dot{background:#f59e0b}.is-authorizing .status-dot{background:linear-gradient(135deg,#2563eb,#8b5cf6)}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.resource-warning{display:grid;gap:7px;margin:8px 0 0;padding:8px 10px;border:1px solid #fde68a;border-radius:9px;color:#92400e;background:#fffbeb;font-size:10px;line-height:1.45}.grant-images{min-height:31px;border:1px solid #f3c44e;border-radius:8px;color:#78350f;background:#fff;font-size:9px;font-weight:800;cursor:pointer}.grant-images:hover{border-color:#d79b16;background:#fffcf2}.grant-images:disabled{cursor:wait;opacity:.65}.permission-panel{display:grid;gap:5px}.permission-panel[hidden]{display:none}.permission-panel iframe{display:block;width:100%;height:292px;border:0;border-radius:12px;background:#f8fafc}.open-permission-window{min-height:25px;border:0;color:#64748b;background:transparent;font-size:8px;cursor:pointer}.open-permission-window:hover{color:#2563eb;text-decoration:underline;text-underline-offset:2px}.is-authorizing .image-stage,.is-authorizing .resource-warning,.is-authorizing .meta,.is-authorizing .preview-actions,.is-authorizing .feedback{display:none}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .copy.is-success{border-color:#86efac;color:#047857;background:#ecfdf5}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}.copy-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
+    :host{position:fixed;inset:auto;left:var(--domshot-viewport-left,0);top:var(--domshot-viewport-top,0);display:flex;box-sizing:border-box;width:var(--domshot-viewport-width,100vw);height:var(--domshot-viewport-height,100vh);align-items:flex-end;justify-content:flex-end;padding:calc(18px * var(--domshot-ui-scale,1))}.preview-card{width:336px;flex:none;padding:12px;border:1px solid #dfe5ee;border-radius:18px;background:#f8fafc;box-shadow:0 18px 52px rgba(15,23,42,.24);transform:scale(var(--domshot-ui-scale,1));transform-origin:right bottom;pointer-events:auto}.preview-head{display:flex;align-items:center;justify-content:space-between;padding:2px 3px 10px;font-size:13px}.status-dot{display:inline-grid;place-items:center;width:21px;height:21px;margin-right:7px;border-radius:50%;color:#fff;background:#10b981;font-weight:900}.has-resource-warning .status-dot{background:#f59e0b}.is-authorizing .status-dot{background:linear-gradient(135deg,#2563eb,#8b5cf6)}.icon-button{width:26px;height:26px;border:0;border-radius:8px;color:#64748b;background:transparent;font-size:20px;cursor:pointer}.icon-button:hover{background:#eef2f7}.image-stage{display:flex;align-items:center;justify-content:center;height:196px;padding:10px;border:1px solid #dfe5ee;border-radius:12px;background:repeating-conic-gradient(#e8edf4 0 25%,#fff 0 50%) 50%/14px 14px;overflow:hidden}.image-stage img{display:block;max-width:100%;max-height:100%;border-radius:3px;box-shadow:0 5px 18px rgba(15,23,42,.16)}.resource-warning{display:grid;gap:7px;margin:8px 0 0;padding:8px 10px;border:1px solid #fde68a;border-radius:9px;color:#92400e;background:#fffbeb;font-size:10px;line-height:1.45}.grant-images{min-height:31px;border:1px solid #f3c44e;border-radius:8px;color:#78350f;background:#fff;font-size:9px;font-weight:800;cursor:pointer}.grant-images:hover{border-color:#d79b16;background:#fffcf2}.grant-images:disabled{cursor:wait;opacity:.65}.permission-panel{display:grid;gap:5px}.permission-panel[hidden]{display:none}.permission-panel iframe{display:block;width:100%;height:292px;border:0;border-radius:12px;background:#f8fafc}.open-permission-window{min-height:25px;border:0;color:#64748b;background:transparent;font-size:8px;cursor:pointer}.open-permission-window:hover{color:#2563eb;text-decoration:underline;text-underline-offset:2px}.is-authorizing .image-stage,.is-authorizing .resource-warning,.is-authorizing .meta,.is-authorizing .history-retention,.is-authorizing .preview-actions,.is-authorizing .feedback{display:none}.meta{display:flex;justify-content:space-between;gap:8px;padding:10px 2px 7px;color:#64748b;font:9px ui-monospace,SFMono-Regular,monospace}.meta span{max-width:50%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.history-retention{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 8px;padding-top:7px;border-top:1px solid #e5eaf1;color:#64748b;font-size:8px;line-height:12px}.history-retention-toggle{padding:2px 0;border:0;color:#64748b;background:transparent;font-size:8px;font-weight:700;cursor:pointer}.history-retention-toggle:hover{color:#2563eb;text-decoration:underline;text-underline-offset:2px}.history-retention-toggle:disabled{cursor:wait;opacity:.55}.preview-actions{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}.preview-actions button{min-height:38px;border:1px solid #d6deea;border-radius:10px;color:#0f172a;background:#fff;font-size:11px;font-weight:800;cursor:pointer}.preview-actions .copy.is-success{border-color:#86efac;color:#047857;background:#ecfdf5}.preview-actions .download{border:0;color:#fff;background:linear-gradient(135deg,#2563eb,#8b5cf6)}.preview-actions button:hover{transform:translateY(-1px)}.feedback{height:0;margin:0;color:#10b981;font-size:9px;text-align:center;opacity:0;transition:.15s}.feedback:not(:empty){height:21px;padding-top:8px;opacity:1}.feedback.is-error{color:#ef4444}.copy-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(prefers-reduced-motion:reduce){.preview-actions button,.feedback{transition:none}}`;
 }
 
 function previewInteractionStyles() {
@@ -697,6 +738,9 @@ function themeStyles() {
     :host([data-domshot-theme="dark"]) .grant-images:hover{border-color:#d97706;background:#29200f}
     :host([data-domshot-theme="dark"]) .permission-panel iframe{background:#0f172a}
     :host([data-domshot-theme="dark"]) .open-permission-window{color:#94a3b8}
+    :host([data-domshot-theme="dark"]) .history-retention{border-color:#26354a;color:#94a3b8}
+    :host([data-domshot-theme="dark"]) .history-retention-toggle{color:#94a3b8}
+    :host([data-domshot-theme="dark"]) .history-retention-toggle:hover{color:#60a5fa}
     :host([data-domshot-theme="dark"]) .preview-actions button{border-color:#334155;color:#e6edf8;background:#111b2b}
     :host([data-domshot-theme="dark"]) .preview-actions .download{border:1px solid transparent;color:#fff;background:linear-gradient(135deg,#2563eb,#7c3aed)}
     :host([data-domshot-theme="dark"]) .preview-actions button:not(.is-success):not(.is-error):hover{border-color:#60a5fa;background:#16243a;box-shadow:0 7px 18px rgba(37,99,235,.2)}

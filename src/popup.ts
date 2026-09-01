@@ -1,9 +1,12 @@
-import type { CaptureSettings, ExtensionMessage } from './types';
-import { CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
+import type { CaptureHistoryDetail, CaptureHistoryItem, CaptureSettings, ExtensionMessage } from './types';
+import { BACKGROUND_PROTOCOL, CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import type { LanguagePreference, UiLocale } from './types';
 import { loadLanguagePreference, localizeDocument, resolveLocale, saveLanguagePreference, t } from './i18n';
 import type { ThemePreference, UiTheme } from './types';
 import { applyDocumentTheme, loadThemePreference, resolveTheme, saveThemePreference } from './theme';
+import { bindCaptureResultActions } from './capture-result';
+import type { CaptureResultActions, CaptureResultAsset } from './capture-result';
+import { clearCaptureHistory, deleteCaptureHistory, getCaptureHistory, listCaptureHistory } from './history-client';
 import './popup.css';
 
 const status = document.querySelector<HTMLElement>('#status')!;
@@ -18,11 +21,30 @@ const reconcile = document.querySelector<HTMLInputElement>('#reconcile')!;
 const outerShadows = document.querySelector<HTMLInputElement>('#outerShadows')!;
 const compressImages = document.querySelector<HTMLInputElement>('#compressImages')!;
 const settingsButton = document.querySelector<HTMLButtonElement>('#settingsButton')!;
+const historyButton = document.querySelector<HTMLButtonElement>('#historyButton')!;
+const historyBadge = document.querySelector<HTMLElement>('#historyBadge')!;
 const backButton = document.querySelector<HTMLButtonElement>('#backButton')!;
+const historyBackButton = document.querySelector<HTMLButtonElement>('#historyBackButton')!;
 const homePanel = document.querySelector<HTMLElement>('#homePanel')!;
 const settingsPanel = document.querySelector<HTMLElement>('#settingsPanel')!;
+const historyPanel = document.querySelector<HTMLElement>('#historyPanel')!;
+const historyList = document.querySelector<HTMLElement>('#historyList')!;
+const historyEmpty = document.querySelector<HTMLElement>('#historyEmpty')!;
+const historyCount = document.querySelector<HTMLElement>('#historyCount')!;
+const clearHistoryButton = document.querySelector<HTMLButtonElement>('#clearHistoryButton')!;
+const historyDetail = document.querySelector<HTMLElement>('#historyDetail')!;
+const detailBackButton = document.querySelector<HTMLButtonElement>('#detailBackButton')!;
+const detailImage = document.querySelector<HTMLImageElement>('#detailImage')!;
+const detailTitle = document.querySelector<HTMLElement>('#detailTitle')!;
+const detailMeta = document.querySelector<HTMLElement>('#detailMeta')!;
+const detailDeleteButton = document.querySelector<HTMLButtonElement>('#detailDeleteButton')!;
 let activeLocale: UiLocale = resolveLocale('auto');
 let activeTheme: UiTheme = resolveTheme('auto');
+let captures: CaptureHistoryItem[] = [];
+let activeCapture: CaptureHistoryDetail | null = null;
+let clearConfirmationTimer: number | undefined;
+let historyActionCleanups: Array<() => void> = [];
+let detailResultActions: CaptureResultActions | null = null;
 
 function chosen<T extends string>(name: string): T {
   return document.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)!.value as T;
@@ -98,6 +120,146 @@ function applyThemePreference(preference: ThemePreference) {
   applyDocumentTheme(activeTheme);
 }
 
+async function historyMessage<T>(message: ExtensionMessage): Promise<T | undefined> {
+  try { return await chrome.runtime?.sendMessage(message) as T; } catch { return undefined; }
+}
+
+async function loadHistory(showFailure = true) {
+  try {
+    await ensureBackgroundReady();
+    captures = await listCaptureHistory();
+    renderHistory();
+  } catch (error) {
+    if (showFailure) status.textContent = error instanceof Error ? error.message : t(activeLocale, 'historyLoadFailed');
+  }
+}
+
+async function ensureBackgroundReady() {
+  const response = await historyMessage<{ protocol?: number }>({ type: 'DOMSHOT_BACKGROUND_PING' });
+  if (response?.protocol !== BACKGROUND_PROTOCOL) throw new Error(t(activeLocale, 'extensionReloadRequired'));
+}
+
+function renderHistory() {
+  historyActionCleanups.forEach((cleanup) => cleanup());
+  historyActionCleanups = [];
+  historyList.replaceChildren();
+  historyCount.textContent = `${captures.length} / 10`;
+  historyBadge.textContent = String(captures.length);
+  historyBadge.hidden = captures.length === 0;
+  historyEmpty.hidden = captures.length !== 0;
+  clearHistoryButton.hidden = captures.length === 0;
+  for (const capture of captures) historyList.append(createHistoryCard(capture));
+}
+
+function createHistoryCard(capture: CaptureHistoryItem): HTMLElement {
+  const card = document.createElement('article');
+  card.className = 'history-card';
+  const preview = document.createElement('button');
+  preview.className = 'history-thumb';
+  preview.type = 'button';
+  preview.setAttribute('aria-label', t(activeLocale, 'previewAlt', { label: capture.label }));
+  const image = document.createElement('img');
+  image.src = capture.thumbnailDataUrl;
+  image.alt = '';
+  const format = document.createElement('span');
+  format.className = 'history-format';
+  format.textContent = capture.format.toUpperCase();
+  const previewCue = document.createElement('span');
+  previewCue.className = 'history-preview-cue';
+  previewCue.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.8 12s3.3-5.2 9.2-5.2 9.2 5.2 9.2 5.2-3.3 5.2-9.2 5.2S2.8 12 2.8 12Z"/><circle cx="12" cy="12" r="2.4"/></svg>';
+  previewCue.append(document.createTextNode(t(activeLocale, 'previewCapture')));
+  preview.append(image, format, previewCue);
+  preview.addEventListener('click', () => void openHistoryDetail(capture.id));
+
+  const copy = document.createElement('button');
+  copy.className = 'history-copy'; copy.type = 'button'; copy.dataset.captureAction = 'copy'; copy.textContent = t(activeLocale, 'copyImage');
+  const download = document.createElement('button');
+  download.className = 'history-download'; download.type = 'button'; download.dataset.captureAction = 'download'; download.textContent = t(activeLocale, 'downloadImage');
+  const remove = document.createElement('button');
+  remove.className = 'history-delete'; remove.type = 'button';
+  remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9 7V4.8h6V7m-8 0 .7 12h8.6L17 7M10 10.5v5M14 10.5v5"/></svg>';
+  remove.setAttribute('aria-label', t(activeLocale, 'deleteCapture'));
+  remove.addEventListener('click', () => void deleteCapture(capture.id));
+
+  const copyBlock = document.createElement('div');
+  copyBlock.className = 'history-card-copy';
+  const title = document.createElement('strong'); title.textContent = capture.label;
+  const source = document.createElement('small'); source.textContent = capture.sourceHost || capture.format.toUpperCase();
+  const meta = document.createElement('span');
+  meta.textContent = `${formatHistoryDate(capture.createdAt)} · ${capture.width} × ${capture.height} · ${formatBytes(capture.size)}`;
+  const actions = document.createElement('div'); actions.className = 'history-card-actions'; actions.append(copy, download);
+  copyBlock.append(title, source, meta, actions);
+  card.append(preview, copyBlock, remove);
+  const resultActions = bindCaptureResultActions(card, {
+    locale: activeLocale,
+    loadAsset: () => loadHistoryAsset(capture.id),
+    announce: (message) => { status.textContent = message; },
+  });
+  historyActionCleanups.push(() => resultActions.cleanup());
+  return card;
+}
+
+async function withHistoryDetail(id: string, action: (detail: CaptureHistoryDetail) => Promise<void>) {
+  try {
+    const capture = await getCaptureHistory(id);
+    if (!capture) throw new Error(t(activeLocale, 'historyActionFailed'));
+    await action(capture);
+  } catch { status.textContent = t(activeLocale, 'historyActionFailed'); }
+}
+
+async function openHistoryDetail(id: string) {
+  await withHistoryDetail(id, async (capture) => {
+    activeCapture = capture;
+    detailImage.src = capture.dataUrl;
+    detailImage.alt = t(activeLocale, 'previewAlt', { label: capture.label });
+    detailTitle.textContent = capture.label;
+    detailMeta.textContent = `${capture.width} × ${capture.height} · ${capture.format.toUpperCase()} · ${formatBytes(capture.size)}`;
+    detailResultActions?.cleanup();
+    detailResultActions = bindCaptureResultActions(historyDetail, {
+      locale: activeLocale,
+      loadAsset: () => captureDetailAsset(capture),
+      announce: (message) => { status.textContent = message; },
+    });
+    historyDetail.hidden = false;
+    requestAnimationFrame(() => detailBackButton.focus());
+  });
+}
+
+async function deleteCapture(id: string) {
+  try { await deleteCaptureHistory(id); } catch { status.textContent = t(activeLocale, 'historyActionFailed'); return; }
+  captures = captures.filter((capture) => capture.id !== id);
+  if (activeCapture?.id === id) closeHistoryDetail();
+  renderHistory();
+  status.textContent = t(activeLocale, 'captureDeleted');
+}
+
+function closeHistoryDetail() {
+  detailResultActions?.cleanup();
+  detailResultActions = null;
+  historyDetail.hidden = true;
+  detailImage.removeAttribute('src');
+  activeCapture = null;
+}
+
+async function loadHistoryAsset(id: string): Promise<CaptureResultAsset> {
+  const capture = await getCaptureHistory(id);
+  if (!capture) throw new Error('Capture no longer exists');
+  return captureDetailAsset(capture);
+}
+
+async function captureDetailAsset(capture: CaptureHistoryDetail): Promise<CaptureResultAsset> {
+  return { blob: await (await fetch(capture.dataUrl)).blob(), format: capture.format, filename: capture.filename };
+}
+
+function formatHistoryDate(value: number) {
+  return new Intl.DateTimeFormat(activeLocale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(value);
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.id || !tab.url || /^(chrome|edge|about|view-source):/.test(tab.url)) {
@@ -124,6 +286,7 @@ async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_VISIBLE_AREA' | 'DOMSHOT_
   status.textContent = t(activeLocale, type === 'DOMSHOT_SELECT' ? 'openingViewfinder' : type === 'DOMSHOT_VISIBLE_AREA' ? 'preparingVisible' : 'preparingPage');
 
   try {
+    await ensureBackgroundReady();
     await chrome.storage.sync.set({ captureSettings: settings });
     const tab = await getActiveTab();
     const pageZoom = await chrome.tabs.getZoom(tab.id!);
@@ -177,6 +340,38 @@ settingsButton.addEventListener('click', () => {
   settingsPanel.hidden = false;
   requestAnimationFrame(() => backButton.focus());
 });
+historyButton.addEventListener('click', () => {
+  homePanel.hidden = true;
+  historyPanel.hidden = false;
+  closeHistoryDetail();
+  void loadHistory();
+  requestAnimationFrame(() => historyBackButton.focus());
+});
+historyBackButton.addEventListener('click', () => {
+  historyPanel.hidden = true;
+  homePanel.hidden = false;
+  requestAnimationFrame(() => historyButton.focus());
+});
+detailBackButton.addEventListener('click', () => {
+  closeHistoryDetail();
+  requestAnimationFrame(() => historyBackButton.focus());
+});
+detailDeleteButton.addEventListener('click', () => { if (activeCapture) void deleteCapture(activeCapture.id); });
+clearHistoryButton.addEventListener('click', () => {
+  if (clearHistoryButton.dataset.confirm !== 'true') {
+    clearHistoryButton.dataset.confirm = 'true';
+    clearHistoryButton.textContent = t(activeLocale, 'confirmClear');
+    window.clearTimeout(clearConfirmationTimer);
+    clearConfirmationTimer = window.setTimeout(() => {
+      delete clearHistoryButton.dataset.confirm;
+      clearHistoryButton.textContent = t(activeLocale, 'clearAll');
+    }, 3000);
+    return;
+  }
+  void clearCaptureHistory().then(() => {
+    captures = []; closeHistoryDetail(); renderHistory(); status.textContent = t(activeLocale, 'historyCleared');
+  }, () => { status.textContent = t(activeLocale, 'historyActionFailed'); });
+});
 backButton.addEventListener('click', () => {
   settingsPanel.hidden = true;
   homePanel.hidden = false;
@@ -192,4 +387,5 @@ void Promise.all([
   applyLanguagePreference(languagePreference);
   applyThemePreference(themePreference);
   applySettings({ ...DEFAULT_SETTINGS, ...(captureSettings ?? {}) });
+  void loadHistory(false);
 });

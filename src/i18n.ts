@@ -3,7 +3,7 @@ import type { LanguagePreference, UiLocale } from './types';
 export const LANGUAGE_STORAGE_KEY = 'uiLanguage';
 
 const en = {
-  homeAria: 'Capture home', openSettings: 'Open settings', introTitle: 'Capture web content precisely',
+  homeAria: 'Capture home', openSettings: 'Open settings', openHistory: 'Open recent captures', introTitle: 'Capture web content precisely',
   introSubtitle: 'Preserve original styles, fonts, and layout details', captureActions: 'Capture actions',
   selectElement: 'Capture page element', selectElementDesc: 'Hover to select an element, then click to capture',
   captureVisible: 'Capture visible area', captureVisibleDesc: 'Save what is currently visible in the viewport',
@@ -46,19 +46,26 @@ const en = {
   permissionEyebrow: 'Only for sources needed by this capture', permissionHeading: 'Allow cross-origin images',
   permissionIntro: 'The browser blocked the image sources below. Once allowed, DOMShot will read them locally and retry the capture.',
   pendingOrigins: 'Sources awaiting permission', originCountOne: '1 source', originCountMany: '{count} sources',
-  privacyTitle: 'Images are never uploaded', privacyBody: 'Login cookies are not sent, and image content or browsing history is not stored.',
+  privacyTitle: 'Images are never uploaded', privacyBody: 'Login cookies are not sent. Completed captures stay only in your local recent captures.',
   notNow: 'Not now', allowRetry: 'Allow and retry', backCapture: 'Back to capture', requestExpired: 'This permission request expired. Return to the original page and capture again.',
   requestReadFailed: 'Could not read the permission request. Close this window and try again.', waitingBrowser: 'Waiting for browser confirmation…',
   permissionDeclined: 'Not allowed. The current capture can still use placeholders; you can allow access later.', retryPermission: 'Try again',
   authorizedRetrying: 'Allowed. Retrying the capture on the original page…', authorizedNavigated: 'Allowed, but the original page was closed or navigated away.',
   recapturing: 'Retrying capture', authorized: 'Allowed', permissionIncomplete: 'The permission request did not complete. Try again later.',
   port: 'Port {port}', noPendingOrigins: 'No image sources are waiting for permission',
+  recentCaptures: 'Recent captures', clearAll: 'Clear all', confirmClear: 'Confirm clear', historyLocal: 'Stored only in this browser',
+  noRecentCaptures: 'No recent captures', historyEmptyHint: 'Captures are saved here automatically, ready to copy or download again.', historyPreview: 'Capture preview',
+  backHistory: 'Back to recent captures', previewCapture: 'Preview', downloadImage: 'Download', deleteCapture: 'Delete', historyLoadFailed: 'Could not load recent captures',
+  historyActionFailed: 'Could not complete that action', captureDeleted: 'Capture deleted', historyCleared: 'Recent captures cleared',
+  extensionReloadRequired: 'DOMShot was updated. Reload the extension and try again.',
+  savedToRecent: 'Saved to recent captures', dontSaveThisCapture: 'Don’t save to recent captures', historyNotSaved: 'Not saved to recent captures',
+  notKeptInRecent: 'This capture won’t be kept', restoreHistorySave: 'Restore save', saveToRecent: 'Save to recent captures',
 } as const;
 
 type MessageKey = keyof typeof en;
 
 const zh: Record<MessageKey, string> = {
-  homeAria: '截图主页', openSettings: '打开设置', introTitle: '精确捕获网页内容', introSubtitle: '保留原有样式、字体与布局细节',
+  homeAria: '截图主页', openSettings: '打开设置', openHistory: '打开最近截图', introTitle: '精确捕获网页内容', introSubtitle: '保留原有样式、字体与布局细节',
   captureActions: '截图操作', selectElement: '截取页面元素', selectElementDesc: '悬停选择元素，单击即可截图', capturePage: '截取完整页面',
   captureVisible: '截取可见区域', captureVisibleDesc: '保存当前视口中可见的页面内容',
   capturePageDesc: '保存当前页面的全部内容', outputSettings: '输出设置', currentScale: '当前 {scale}×', imageFormat: '图片格式',
@@ -93,11 +100,17 @@ const zh: Record<MessageKey, string> = {
   permissionDocumentTitle: '允许加载图片来源 · DOMShot', permissionBrand: 'DOMShot · 图片访问', permissionEyebrow: '仅用于本次截图所需来源',
   permissionHeading: '允许加载跨域图片', permissionIntro: '浏览器阻止了以下图片来源。授权后，DOMShot 会在本机读取图片并立即重新截图。',
   pendingOrigins: '待授权来源', originCountOne: '1 个', originCountMany: '{count} 个', privacyTitle: '图片不会上传',
-  privacyBody: '不携带登录 Cookie，不保存图片内容或浏览记录。', notNow: '暂不授权', allowRetry: '允许并重新截图', backCapture: '返回截图',
+  privacyBody: '不携带登录 Cookie；完成的截图仅保存在本机最近截图中。', notNow: '暂不授权', allowRetry: '允许并重新截图', backCapture: '返回截图',
   requestExpired: '授权请求已失效，请返回原页面重新截图。', requestReadFailed: '无法读取授权请求，请关闭窗口后重试。', waitingBrowser: '等待浏览器确认…',
   permissionDeclined: '未授权。当前截图仍可使用占位内容；需要时可以再次授权。', retryPermission: '再次授权',
   authorizedRetrying: '已授权，正在原页面重新截图…', authorizedNavigated: '已授权，但原页面已关闭或发生了跳转。', recapturing: '正在重新截图',
   authorized: '已授权', permissionIncomplete: '权限请求未完成，请稍后再次尝试。', port: '端口 {port}', noPendingOrigins: '没有待处理的图片来源',
+  recentCaptures: '最近截图', clearAll: '全部清空', confirmClear: '确认清空', historyLocal: '仅保存在此浏览器',
+  noRecentCaptures: '暂无最近截图', historyEmptyHint: '截图会自动保存在这里，方便再次复制或下载。', historyPreview: '截图预览', backHistory: '返回最近截图',
+  previewCapture: '预览', downloadImage: '下载', deleteCapture: '删除', historyLoadFailed: '无法加载最近截图', historyActionFailed: '无法完成此操作',
+  captureDeleted: '截图已删除', historyCleared: '最近截图已清空', extensionReloadRequired: 'DOMShot 已更新，请重新加载扩展后再试。',
+  savedToRecent: '已保存到最近截图', dontSaveThisCapture: '不保存到最近截图', historyNotSaved: '未保存到最近截图',
+  notKeptInRecent: '本次截图不会保留', restoreHistorySave: '恢复保存', saveToRecent: '保存到最近截图',
 };
 
 const messages: Record<UiLocale, Record<MessageKey, string>> = { en, 'zh-CN': zh };
