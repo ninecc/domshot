@@ -191,6 +191,9 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         filenameChoicesFit: [...document.querySelectorAll('.filename-segment span')].every((item) => item.scrollWidth <= item.clientWidth),
         delayOptionCount: document.querySelectorAll('input[name="captureDelay"]').length,
         delayDefault: document.querySelector('input[name="captureDelay"]:checked').value,
+        delayLabels: [...document.querySelectorAll('.delay-segment span')].map((item) => item.textContent),
+        delayChoicesFit: [...document.querySelectorAll('.delay-segment span')].every((item) => item.scrollWidth <= item.clientWidth),
+        noDelayAriaLabel: document.querySelector('input[name="captureDelay"][value="0"]').getAttribute('aria-label'),
         footerVisible: getComputedStyle(document.querySelector('.popup-footer')).display !== 'none',
         outputSurface: (() => {
           const style = getComputedStyle(document.querySelector('.output-settings'));
@@ -234,6 +237,9 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.filenameChoicesFit, true);
     assert.equal(metrics.delayOptionCount, 4);
     assert.equal(metrics.delayDefault, '0');
+    assert.deepEqual(metrics.delayLabels, ['0s', '0.5s', '1s', '2s']);
+    assert.equal(metrics.delayChoicesFit, true);
+    assert.equal(metrics.noDelayAriaLabel, 'No delay');
     assert.deepEqual(metrics.implicitLineHeights.filter(({ lineHeight }) => lineHeight === 'normal'), [], 'localized text must not rely on font-dependent normal line height');
     assert.equal(metrics.footerVisible, true, 'shared footer must remain visible on the settings panel');
     assert.equal(metrics.advancedSurface.backgroundImage, 'none', 'settings containers must not use decorative gradients');
@@ -331,6 +337,9 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         advancedTitle: document.querySelector('#advanced-title').textContent,
         footer: document.querySelector('.status-copy').textContent,
         autoLabel: document.querySelector('input[name="language"][value="auto"] + span').textContent,
+        delayLabels: [...document.querySelectorAll('.delay-segment span')].map((item) => item.textContent),
+        delayChoicesFit: [...document.querySelectorAll('.delay-segment span')].every((item) => item.scrollWidth <= item.clientWidth),
+        noDelayAriaLabel: document.querySelector('input[name="captureDelay"][value="0"]').getAttribute('aria-label'),
         layout: (() => {
           const stable = (value) => Math.round(value * 100) / 100;
           const height = (selector) => stable(document.querySelector(selector).getBoundingClientRect().height);
@@ -352,6 +361,9 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     })()`);
     assert.equal(chinese.lang, 'zh-CN');
     assert.equal(chinese.storedLanguage, 'zh-CN');
+    assert.deepEqual(chinese.delayLabels, ['0s', '0.5s', '1s', '2s']);
+    assert.equal(chinese.delayChoicesFit, true);
+    assert.equal(chinese.noDelayAriaLabel, '不等待');
     assert.ok([chinese.settingsTitle, chinese.generalTitle, chinese.advancedTitle, chinese.footer, chinese.autoLabel].every(Boolean));
     assert.notEqual(chinese.settingsTitle, initial.settingsTitle);
     assert.notEqual(chinese.generalTitle, initial.generalTitle);
