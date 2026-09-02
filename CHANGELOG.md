@@ -2,6 +2,24 @@
 
 All notable changes to DOMShot are documented in this file.
 
+## [0.2.0] - 2026-09-02
+
+### Added
+
+- **settings:** Manage output, post-capture actions, file naming, rendering options, language, and light or dark appearance in a dedicated settings panel
+- **history:** Optionally keep up to 10 recent captures locally, with saving off by default, preview and reuse controls, undoable deletion, and clear-all management
+- **capture:** Capture the current visible viewport alongside page elements and complete pages
+
+### Changed
+
+- **permissions:** Clarify how optional image-source access is requested, used, retained, and removed
+- **i18n:** Use concise, natural English and Chinese across capture controls, settings, errors, permissions, and recent capture history
+
+### Fixed
+
+- **history:** Keep large recent captures available reliably across extension updates, repeated previews, deletion, and recovery
+- **preview:** Keep preview controls stable on hover and show copy, download, and error feedback inside the relevant buttons
+
 ## [0.1.0] - 2026-08-26
 
 Initial public release of DOMShot, a Chrome extension for capturing DOM elements and complete pages as images.

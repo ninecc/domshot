@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "changed",
-  "scope": "i18n",
-  "summary": "Use concise, natural English and Chinese across capture controls, settings, errors, permissions, and recent capture history"
-}

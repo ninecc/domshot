@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "changed",
-  "scope": "permissions",
-  "summary": "Clarify how optional image-source access is requested, used, retained, and removed"
-}
