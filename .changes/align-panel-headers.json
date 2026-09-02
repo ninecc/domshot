@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "changed",
+  "scope": "popup",
+  "summary": "Give settings and recent captures a consistent navigation bar with centered titles and stable edge actions"
+}

@@ -43,13 +43,25 @@
 
       <section class="panel history-panel" id="historyPanel" aria-labelledby="history-title" hidden>
         <header class="settings-header history-header">
-          <button class="back-button" id="historyBackButton" type="button" aria-label="Back to capture" data-i18n-aria-label="backHome"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
-          <h1 id="history-title" data-i18n="recentCaptures">Recent captures</h1>
+          <div class="header-leading">
+            <button class="back-button" id="historyBackButton" type="button" aria-label="Back to capture" data-i18n-aria-label="backHome"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h1 id="history-title" data-i18n="recentCaptures">Recent captures</h1>
+          </div>
           <button class="clear-history" id="clearHistoryButton" type="button" data-i18n="clearAll" hidden>Clear all</button>
         </header>
         <div class="history-summary"><span id="historyStorageStatus" data-i18n="historySavingOff">New captures aren’t added automatically · Existing captures stay here</span><strong id="historyCount">0</strong></div>
         <div class="history-list" id="historyList" aria-live="polite"></div>
-        <div class="history-empty" id="historyEmpty"><span class="empty-frame" aria-hidden="true"><i></i></span><strong data-i18n="noRecentCaptures">No recent captures</strong><small id="historyEmptyHint" data-i18n="historyEmptyHintOff">New captures won’t appear here automatically. You can still add one from its preview.</small></div>
+        <div class="history-empty" id="historyEmpty">
+          <svg class="empty-captures" viewBox="0 0 92 76" aria-hidden="true">
+            <rect class="empty-rear-frame" x="10" y="9" width="57" height="43" rx="9" transform="rotate(-3 38 30)" />
+            <rect class="empty-front-frame" x="17" y="15" width="58" height="44" rx="9" />
+            <path class="empty-photo-mark" d="M27 48l11-10 8 7 8-8 11 11" />
+            <circle class="empty-photo-sun" cx="60" cy="27" r="3.3" />
+            <circle class="empty-history-badge" cx="69" cy="55" r="12" />
+            <path class="empty-history-mark" d="M63 52a7 7 0 1 1-.2 5.8M63 52v-4m0 4h4M69 51v4l2.7 1.5" />
+          </svg>
+          <strong data-i18n="noRecentCaptures">No recent captures</strong><small id="historyEmptyHint" data-i18n="historyEmptyHintOff">New captures won’t appear here automatically. You can still add one from its preview.</small>
+        </div>
         <section class="history-detail" id="historyDetail" aria-label="Capture preview" data-i18n-aria-label="historyPreview" hidden>
           <header class="detail-header"><button class="back-button" id="detailBackButton" type="button" data-i18n-aria-label="backHistory" aria-label="Back to recent captures"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><strong id="detailTitle"></strong><button class="detail-delete" id="detailDeleteButton" type="button" data-i18n-aria-label="deleteCapture" aria-label="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9 7V4.8h6V7m-8 0 .7 12h8.6L17 7M10 10.5v5M14 10.5v5"/></svg></button></header>
           <div class="detail-stage"><img id="detailImage" alt="" /></div>
@@ -61,10 +73,12 @@
 
       <section class="panel settings-panel" id="settingsPanel" aria-labelledby="settings-title" hidden>
         <header class="settings-header">
-          <button class="back-button" id="backButton" type="button" aria-label="Back to capture" data-i18n-aria-label="backHome">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-          </button>
-          <h1 id="settings-title" data-i18n="settings">Settings</h1>
+          <div class="header-leading">
+            <button class="back-button" id="backButton" type="button" aria-label="Back to capture" data-i18n-aria-label="backHome">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <h1 id="settings-title" data-i18n="settings">Settings</h1>
+          </div>
         </header>
 
         <div class="settings-content">

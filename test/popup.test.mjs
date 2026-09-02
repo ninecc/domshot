@@ -188,6 +188,15 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
           };
         })(),
         settingsSubtitle: Boolean(document.querySelector('.settings-header p')),
+        settingsHeader: (() => {
+          const button = document.querySelector('#backButton').getBoundingClientRect();
+          const title = document.querySelector('#settings-title').getBoundingClientRect();
+          return {
+            grouped: Boolean(document.querySelector('#settingsPanel .header-leading')),
+            titleCenterOffset: title.left + title.width / 2 - document.documentElement.clientWidth / 2,
+            backLeft: button.left
+          };
+        })(),
         settingsTitleVisible: document.querySelector('#settings-title').getClientRects().length > 0,
         backButtonVisible: document.querySelector('#backButton').getClientRects().length > 0,
         autosaveVisible: document.querySelector('.autosave-status').getClientRects().length > 0,
@@ -233,6 +242,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.homeHidden, true);
     assert.equal(metrics.settingsHidden, false);
     assert.equal(metrics.settingsSubtitle, false);
+    assert.equal(metrics.settingsHeader.grouped, true, 'settings header should keep one semantic navigation group');
     assert.equal(metrics.settingsTitleVisible, true);
     assert.equal(metrics.backButtonVisible, true);
     assert.equal(metrics.autosaveVisible, true);
@@ -277,6 +287,15 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       `getComputedStyle(document.querySelector('#settingsPanel')).transform === 'none'`,
       'settings panel entrance animation did not finish',
     );
+    const stableSettingsHeader = await page.evaluate(`(() => {
+      const button = document.querySelector('#backButton').getBoundingClientRect();
+      const title = document.querySelector('#settings-title').getBoundingClientRect();
+      return {
+        titleCenterOffset: title.left + title.width / 2 - document.documentElement.clientWidth / 2,
+        backLeft: button.left
+      };
+    })()`);
+    assert.ok(Math.abs(stableSettingsHeader.titleCenterOffset) < 0.5, `settings title is ${stableSettingsHeader.titleCenterOffset}px off center`);
     const backIdle = await buttonMetrics(page, '#backButton');
     assert.deepEqual(
       { width: backIdle.rect.width, height: backIdle.rect.height },
@@ -466,7 +485,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
 
     await page.evaluate(`document.querySelector('#historyButton').click()`);
     await page.waitUntil(`document.querySelectorAll('.history-card').length === 1`, 'recent capture did not render');
-    await page.nextFrames(2);
+    await page.waitUntil(`getComputedStyle(document.querySelector('#historyPanel')).transform === 'none'`, 'history panel entrance animation did not finish');
     const history = await page.evaluate(`({
       homeHidden: document.querySelector('#homePanel').hidden,
       historyHidden: document.querySelector('#historyPanel').hidden,
@@ -492,6 +511,15 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       savingStatus: document.querySelector('#historyStorageStatus').textContent,
       focusedElement: document.activeElement.id,
       panelHeight: document.querySelector('#historyPanel').getBoundingClientRect().height,
+      header: (() => {
+        const button = document.querySelector('#historyBackButton').getBoundingClientRect();
+        const title = document.querySelector('#history-title').getBoundingClientRect();
+        return {
+          grouped: Boolean(document.querySelector('#historyPanel .header-leading')),
+          titleCenterOffset: title.left + title.width / 2 - document.documentElement.clientWidth / 2,
+          backLeft: button.left
+        };
+      })(),
       scrollWidth: document.documentElement.scrollWidth,
       scrollHeight: document.documentElement.scrollHeight
     })`);
@@ -512,6 +540,9 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(history.savingStatus, '新截图不会自动加入此处 · 已有截图仍会保留');
     assert.equal(history.focusedElement, 'historyBackButton');
     assert.equal(history.panelHeight, metrics.localeLayout.panelHeight);
+    assert.equal(history.header.grouped, true, 'history header should keep one semantic navigation group');
+    assert.ok(Math.abs(history.header.titleCenterOffset) < 0.5, `history title is ${history.header.titleCenterOffset}px off center`);
+    assert.ok(Math.abs(history.header.backLeft - stableSettingsHeader.backLeft) < 0.5, 'settings and history back actions should share one left alignment');
     assert.ok(history.scrollWidth <= 360);
     assert.ok(history.scrollHeight <= 600);
 
@@ -642,13 +673,26 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         horizontalOffset: (empty.left + empty.width / 2) - (panel.left + panel.width / 2),
         verticalOffset: (empty.top + empty.height / 2) - (summary.bottom + (panel.bottom - summary.bottom) / 2),
         hint: document.querySelector('#historyEmpty small').textContent,
-        historyIconPathCount: document.querySelectorAll('#historyButton svg path').length
+        historyIconPathCount: document.querySelectorAll('#historyButton svg path').length,
+        illustration: {
+          hiddenFromAssistiveTech: document.querySelector('.empty-captures')?.getAttribute('aria-hidden'),
+          rearFrame: Boolean(document.querySelector('.empty-captures .empty-rear-frame')),
+          frontFrame: Boolean(document.querySelector('.empty-captures .empty-front-frame')),
+          photoMark: Boolean(document.querySelector('.empty-captures .empty-photo-mark')),
+          historyBadge: Boolean(document.querySelector('.empty-captures .empty-history-badge')),
+          historyMark: Boolean(document.querySelector('.empty-captures .empty-history-mark')),
+          legacyCross: Boolean(document.querySelector('.empty-frame i'))
+        }
       };
     })()`);
     assert.ok(Math.abs(emptyState.horizontalOffset) < 0.5, 'empty history state must be horizontally centered');
     assert.ok(Math.abs(emptyState.verticalOffset) < 0.5, 'empty history state must be vertically centered in the content area');
     assert.equal(emptyState.hint, '新截图不会自动加入此处，你仍可在预览中单独加入。');
     assert.equal(emptyState.historyIconPathCount, 3, 'history entry should use the clock-and-arrow icon');
+    assert.deepEqual(emptyState.illustration, {
+      hiddenFromAssistiveTech: 'true', rearFrame: true, frontFrame: true,
+      photoMark: true, historyBadge: true, historyMark: true, legacyCross: false
+    });
   });
 });
 
