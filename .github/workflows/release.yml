@@ -29,7 +29,6 @@ jobs:
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: npm run release:prepare -- "$RELEASE_VERSION"
-      - run: npm run check
       - name: Create release pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,4 +42,3 @@ jobs:
           git commit -m "chore: release v${RELEASE_VERSION}"
           git push origin "$branch"
           gh pr create --base main --head "$branch" --title "chore: release v${RELEASE_VERSION}" --body "Automated release preparation for DOMShot ${RELEASE_VERSION}."
-          gh workflow run ci.yml --ref "$branch"

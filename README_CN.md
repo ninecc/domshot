@@ -86,7 +86,7 @@ npm run release:prepare -- 0.2.0
 
 该命令会校验并消费所有 fragment、生成 [`CHANGELOG.md`](./CHANGELOG.md) 的新版本章节，并同步更新 `package.json`、`package-lock.json` 和 `public/manifest.json` 中的版本号。GitHub 的 **Prepare release** 工作流执行相同流程，并创建 `release/v*` PR 供审核。
 
-仓库维护者需要创建 `changelog: skip` 标签、允许 GitHub Actions 创建 PR，并将 `CI / check` 设置为 `main` 的必需状态检查。发布工作流会为自动生成的 PR 显式触发 CI。
+仓库维护者需要创建 `changelog: skip` 标签、允许 GitHub Actions 创建 PR，并将 `CI / check` 设置为 `main` 的必需状态检查。自动生成的 release PR 与普通 PR 一样，必须通过 `CI / check` 后才能合并。
 
 ## 已知限制
 

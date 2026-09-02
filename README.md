@@ -86,7 +86,7 @@ npm run release:prepare -- 0.2.0
 
 The command validates and consumes all fragments, writes the new [`CHANGELOG.md`](./CHANGELOG.md) section, and synchronizes the version in `package.json`, `package-lock.json`, and `public/manifest.json`. The **Prepare release** GitHub workflow performs the same operation and opens a `release/v*` pull request for review.
 
-Repository maintainers must create the `changelog: skip` label, allow GitHub Actions to create pull requests, and protect `main` with the `CI / check` status check. The release workflow explicitly dispatches CI for its generated pull request.
+Repository maintainers must create the `changelog: skip` label, allow GitHub Actions to create pull requests, and protect `main` with the `CI / check` status check. Generated release pull requests must pass the same required `CI / check` as other pull requests before they are merged.
 
 ## Limitations
 
