@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DOMShot 0.2.0 Store Screenshots</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; background: #111827; font-family: Inter, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif; }
+      .store-shot { position: relative; width: 1280px; height: 800px; overflow: hidden; isolation: isolate; }
+      .store-shot.light { color: #0f172a; background: #f8fafc; }
+      .store-shot.dark { color: #e6edf8; background: #080f1d; }
+      .wash { position: absolute; inset: 0; z-index: -3; }
+      .light .wash { background: radial-gradient(circle at 12% 0%, rgba(8,189,244,.13), transparent 34%), radial-gradient(circle at 61% 90%, rgba(139,92,246,.14), transparent 38%), linear-gradient(135deg,#f8fafc 0%,#f5f8ff 52%,#eef4ff 100%); }
+      .dark .wash { background: radial-gradient(circle at 9% 0%, rgba(34,211,238,.1), transparent 34%), radial-gradient(circle at 61% 88%, rgba(139,92,246,.2), transparent 42%), linear-gradient(135deg,#080f1d 0%,#0c1628 54%,#151331 100%); }
+      .capture-lines { position: absolute; left: -54px; bottom: -70px; z-index: -2; width: 540px; height: 330px; opacity: .5; }
+      .capture-lines::before, .capture-lines::after { position: absolute; content: ""; border: 3px solid; border-radius: 38px; }
+      .capture-lines::before { inset: 0 82px 56px 0; transform: rotate(-7deg); }
+      .capture-lines::after { inset: 76px 0 0 104px; transform: rotate(5deg); }
+      .light .capture-lines { color: rgba(37,99,235,.12); }
+      .dark .capture-lines { color: rgba(96,165,250,.14); }
+      .copy { position: absolute; left: 76px; top: 64px; width: 590px; }
+      .brand { display: flex; align-items: center; gap: 14px; }
+      .brand img { display: block; width: 58px; height: 58px; }
+      .wordmark { font-size: 34px; font-weight: 800; letter-spacing: -.045em; }
+      .wordmark span { color: #2563eb; }
+      .dark .wordmark span { color: #60a5fa; }
+      .version { margin-left: 8px; padding: 6px 10px; border: 1px solid rgba(37,99,235,.2); border-radius: 999px; color: #2563eb; background: rgba(255,255,255,.52); font: 700 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace; }
+      .dark .version { border-color: rgba(96,165,250,.28); color: #93c5fd; background: rgba(15,23,42,.65); }
+      h1 { max-width: 590px; margin: 70px 0 0; font-size: 62px; line-height: 1.05; letter-spacing: -.045em; }
+      .zh h1 { font-size: 60px; letter-spacing: -.055em; }
+      .subtitle { max-width: 550px; margin: 20px 0 0; color: #64748b; font-size: 25px; line-height: 1.45; }
+      .dark .subtitle { color: #a8b7cb; }
+      .proofs { display: grid; gap: 15px; margin-top: 54px; }
+      .proof { display: flex; align-items: center; gap: 13px; color: #334155; font-size: 20px; font-weight: 650; }
+      .dark .proof { color: #cbd5e1; }
+      .proof i { position: relative; display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border-radius: 11px; color: #2563eb; background: rgba(37,99,235,.09); font-style: normal; }
+      .dark .proof i { color: #60a5fa; background: rgba(37,99,235,.2); }
+      .proof i::before { width: 12px; height: 12px; border: 2px solid currentColor; border-radius: 3px; content: ""; }
+      .proof:last-child i::before { width: 12px; height: 7px; border-width: 0 0 2px 2px; border-radius: 0; transform: rotate(-45deg) translate(1px,-1px); }
+      .product-shot { position: absolute; right: 74px; top: 36px; height: 728px; overflow: hidden; border: 1px solid rgba(148,163,184,.28); border-radius: 24px; background: #ffffff; box-shadow: 0 34px 80px rgba(30,64,175,.2),0 8px 24px rgba(15,23,42,.12); transform: rotate(1deg); }
+      .dark .product-shot { border-color: rgba(96,165,250,.25); background: #080f1d; box-shadow: 0 34px 90px rgba(0,0,0,.48),0 0 70px rgba(99,102,241,.14); }
+      .product-shot img { display: block; width: auto; height: 728px; }
+      .frame-accent { position: absolute; right: 50px; top: 18px; z-index: -1; width: 548px; height: 764px; border: 2px solid rgba(37,99,235,.2); border-radius: 36px; transform: rotate(-2deg); }
+      .dark .frame-accent { border-color: rgba(96,165,250,.22); }
+      .frame-accent::after { position: absolute; right: -20px; bottom: 70px; width: 118px; height: 118px; border-radius: 50%; background: linear-gradient(135deg,rgba(8,189,244,.3),rgba(139,92,246,.42)); filter: blur(1px); content: ""; }
+    </style>
+  </head>
+  <body>
+    <section class="store-shot light zh" id="home-light-zh-cn">
+      <div class="wash"></div><div class="capture-lines"></div><div class="frame-accent"></div>
+      <div class="copy">
+        <div class="brand"><img src="../../../public/icon128.png" alt="" /><div class="wordmark">DOM<span>Shot</span></div><span class="version">0.2</span></div>
+        <h1>捕获网页任意部分</h1>
+        <p class="subtitle">元素、可见区域或完整页面，一步生成清晰图片。</p>
+        <div class="proofs"><div class="proof"><i></i><span>PNG、JPG、WebP，多档清晰度</span></div><div class="proof"><i></i><span>图片仅在浏览器本地处理</span></div></div>
+      </div>
+      <div class="product-shot"><img src="source/home-light-zh-cn.png" alt="DOMShot 中文浅色界面" /></div>
+    </section>
+
+    <section class="store-shot light" id="home-light-en">
+      <div class="wash"></div><div class="capture-lines"></div><div class="frame-accent"></div>
+      <div class="copy">
+        <div class="brand"><img src="../../../public/icon128.png" alt="" /><div class="wordmark">DOM<span>Shot</span></div><span class="version">0.2</span></div>
+        <h1>Capture any part of a webpage</h1>
+        <p class="subtitle">Elements, visible areas, or full pages—ready as clear, reusable images.</p>
+        <div class="proofs"><div class="proof"><i></i><span>PNG, JPG, and WebP at multiple resolutions</span></div><div class="proof"><i></i><span>Images are processed locally</span></div></div>
+      </div>
+      <div class="product-shot"><img src="source/home-light-en.png" alt="DOMShot English light interface" /></div>
+    </section>
+
+    <section class="store-shot dark zh" id="home-dark-zh-cn">
+      <div class="wash"></div><div class="capture-lines"></div><div class="frame-accent"></div>
+      <div class="copy">
+        <div class="brand"><img src="../../../public/icon128.png" alt="" /><div class="wordmark">DOM<span>Shot</span></div><span class="version">0.2</span></div>
+        <h1>深色模式，专注截图</h1>
+        <p class="subtitle">跟随系统或手动切换外观，所有截图方式保持清晰易用。</p>
+        <div class="proofs"><div class="proof"><i></i><span>一致的浅色与深色界面</span></div><div class="proof"><i></i><span>中英文自由切换</span></div></div>
+      </div>
+      <div class="product-shot"><img src="source/home-dark-zh-cn.png" alt="DOMShot 中文深色界面" /></div>
+    </section>
+
+    <section class="store-shot dark" id="home-dark-en">
+      <div class="wash"></div><div class="capture-lines"></div><div class="frame-accent"></div>
+      <div class="copy">
+        <div class="brand"><img src="../../../public/icon128.png" alt="" /><div class="wordmark">DOM<span>Shot</span></div><span class="version">0.2</span></div>
+        <h1>A focused dark mode</h1>
+        <p class="subtitle">Follow your system or choose an appearance that keeps capture controls clear.</p>
+        <div class="proofs"><div class="proof"><i></i><span>Consistent light and dark interfaces</span></div><div class="proof"><i></i><span>Switch between English and Chinese</span></div></div>
+      </div>
+      <div class="product-shot"><img src="source/home-dark-en.png" alt="DOMShot English dark interface" /></div>
+    </section>
+  </body>
+</html>
