@@ -12,6 +12,7 @@ const MAX_ENCODED_CHUNK_LENGTH = 2 * 1024 * 1024;
 
 interface StoredCapture extends CaptureHistoryItem {
   blob: Blob;
+  deletedAt?: number;
 }
 
 const pendingHistoryCaptures = new Map<string, {
@@ -102,8 +103,11 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
   }
 
   if (message.type === 'DOMSHOT_HISTORY_DELETE') {
-    await deleteHistoryCapture(message.id);
-    return { ok: true };
+    return { ok: await deleteHistoryCapture(message.id) };
+  }
+
+  if (message.type === 'DOMSHOT_HISTORY_RESTORE') {
+    return { ok: await restoreHistoryCapture(message.id) };
   }
 
   if (message.type === 'DOMSHOT_HISTORY_CLEAR') {
@@ -229,7 +233,12 @@ async function saveHistoryCapture(capture: StoredCapture): Promise<void> {
     store.put(capture);
     const allRequest = store.getAll();
     allRequest.onsuccess = () => {
-      const oldestFirst = (allRequest.result as StoredCapture[]).sort((a, b) => a.createdAt - b.createdAt);
+      const now = Date.now();
+      const storedCaptures = allRequest.result as StoredCapture[];
+      storedCaptures
+        .filter((item) => item.deletedAt && now - item.deletedAt >= CAPTURE_HISTORY_POLICY.undoMilliseconds)
+        .forEach((item) => store.delete(item.id));
+      const oldestFirst = storedCaptures.filter((item) => !item.deletedAt).sort((a, b) => a.createdAt - b.createdAt);
       let totalBytes = oldestFirst.reduce((total, item) => total + item.size, 0);
       while (oldestFirst.length > CAPTURE_HISTORY_POLICY.maxItems || totalBytes > CAPTURE_HISTORY_POLICY.maxTotalBytes) {
         const oldest = oldestFirst.shift();
@@ -245,14 +254,46 @@ async function saveHistoryCapture(capture: StoredCapture): Promise<void> {
 
 async function listHistoryCaptures(): Promise<CaptureHistoryItem[]> {
   const captures = await withHistoryStore<StoredCapture[]>('readonly', (store) => store.getAll());
-  return captures.sort((a, b) => b.createdAt - a.createdAt).map(({ blob: _blob, ...metadata }) => metadata);
+  const now = Date.now();
+  const expired = captures.filter((capture) => capture.deletedAt && now - capture.deletedAt >= CAPTURE_HISTORY_POLICY.undoMilliseconds);
+  await Promise.all(expired.map((capture) => hardDeleteHistoryCapture(capture.id)));
+  return captures
+    .filter((capture) => !capture.deletedAt)
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map(({ blob: _blob, deletedAt: _deletedAt, ...metadata }) => metadata);
 }
 
-function getHistoryCapture(id: string): Promise<StoredCapture | undefined> {
+async function getHistoryCapture(id: string): Promise<StoredCapture | undefined> {
+  const capture = await readStoredHistoryCapture(id);
+  if (!capture?.deletedAt) return capture;
+  if (Date.now() - capture.deletedAt >= CAPTURE_HISTORY_POLICY.undoMilliseconds) await hardDeleteHistoryCapture(id);
+  return undefined;
+}
+
+function readStoredHistoryCapture(id: string): Promise<StoredCapture | undefined> {
   return withHistoryStore<StoredCapture | undefined>('readonly', (store) => store.get(id));
 }
 
-async function deleteHistoryCapture(id: string): Promise<void> {
+async function deleteHistoryCapture(id: string): Promise<boolean> {
+  const capture = await readStoredHistoryCapture(id);
+  if (!capture || capture.deletedAt) return false;
+  await withHistoryStore<IDBValidKey>('readwrite', (store) => store.put({ ...capture, deletedAt: Date.now() }));
+  return true;
+}
+
+async function restoreHistoryCapture(id: string): Promise<boolean> {
+  const capture = await readStoredHistoryCapture(id);
+  if (!capture?.deletedAt) return false;
+  if (Date.now() - capture.deletedAt >= CAPTURE_HISTORY_POLICY.undoMilliseconds) {
+    await hardDeleteHistoryCapture(id);
+    return false;
+  }
+  const { deletedAt: _deletedAt, ...restored } = capture;
+  await withHistoryStore<IDBValidKey>('readwrite', (store) => store.put(restored));
+  return true;
+}
+
+async function hardDeleteHistoryCapture(id: string): Promise<void> {
   await withHistoryStore<undefined>('readwrite', (store) => store.delete(id));
 }
 

@@ -54,6 +54,10 @@ export async function deleteCaptureHistory(id: string): Promise<void> {
   await expectOk({ type: 'DOMSHOT_HISTORY_DELETE', id });
 }
 
+export async function restoreCaptureHistory(id: string): Promise<void> {
+  await expectOk({ type: 'DOMSHOT_HISTORY_RESTORE', id });
+}
+
 export async function clearCaptureHistory(): Promise<void> {
   await expectOk({ type: 'DOMSHOT_HISTORY_CLEAR' });
 }
@@ -75,7 +79,7 @@ async function uploadCaptureHistory(id: string, capture: NewCaptureHistoryItem):
 }
 
 async function expectOk(message: ExtensionMessage): Promise<void> {
-  const response = await sendExtensionMessage(message as Extract<ExtensionMessage, { type: 'DOMSHOT_HISTORY_BEGIN' | 'DOMSHOT_HISTORY_CHUNK' | 'DOMSHOT_HISTORY_COMMIT' | 'DOMSHOT_HISTORY_CANCEL' | 'DOMSHOT_HISTORY_DELETE' | 'DOMSHOT_HISTORY_CLEAR' }>);
+  const response = await sendExtensionMessage(message as Extract<ExtensionMessage, { type: 'DOMSHOT_HISTORY_BEGIN' | 'DOMSHOT_HISTORY_CHUNK' | 'DOMSHOT_HISTORY_COMMIT' | 'DOMSHOT_HISTORY_CANCEL' | 'DOMSHOT_HISTORY_DELETE' | 'DOMSHOT_HISTORY_RESTORE' | 'DOMSHOT_HISTORY_CLEAR' }>);
   if (!response.ok) throw new Error('Capture history operation failed');
 }
 

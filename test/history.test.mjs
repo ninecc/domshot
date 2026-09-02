@@ -15,9 +15,9 @@ test('recent capture storage keeps only the newest 10 items', async () => {
         tabs: { onZoomChange: { addListener() {} }, sendMessage() { return Promise.resolve(); } },
         runtime: { onMessage: { addListener(listener) { globalThis.__historyMessageListener = listener; } } }
       };
-      const deleteFromStore = IDBObjectStore.prototype.delete;
-      IDBObjectStore.prototype.delete = function (...args) {
-        const request = deleteFromStore.apply(this, args);
+      const putIntoStore = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (...args) {
+        const request = putIntoStore.apply(this, args);
         request.addEventListener('success', () => {
           if (globalThis.__historyDeleteTiming) globalThis.__historyDeleteTiming.request = ++globalThis.__historySequence;
         });
@@ -58,6 +58,9 @@ test('recent capture storage keeps only the newest 10 items', async () => {
       const deleteTiming = globalThis.__historyDeleteTiming;
       globalThis.__historyDeleteTiming = null;
       const afterDelete = await globalThis.__sendHistoryMessage({ type: 'DOMSHOT_HISTORY_LIST' });
+      const restored = await globalThis.__sendHistoryMessage({ type: 'DOMSHOT_HISTORY_RESTORE', id: 'capture-11' });
+      const afterRestore = await globalThis.__sendHistoryMessage({ type: 'DOMSHOT_HISTORY_LIST' });
+      await globalThis.__sendHistoryMessage({ type: 'DOMSHOT_HISTORY_DELETE', id: 'capture-11' });
       const oversized = await globalThis.__sendHistoryMessage({
         type: 'DOMSHOT_HISTORY_BEGIN', mimeType: 'image/png', totalChunks: 1,
         capture: {
@@ -75,6 +78,8 @@ test('recent capture storage keeps only the newest 10 items', async () => {
         oversizedRejected: oversized.ok === false && Boolean(oversized.error),
         deleteTiming,
         afterDeleteCount: afterDelete.captures.length,
+        restored: restored.ok,
+        restoredIds: afterRestore.captures.map((capture) => capture.id),
         afterClearCount: afterClear.captures.length
       };
     })()`);
@@ -87,6 +92,8 @@ test('recent capture storage keeps only the newest 10 items', async () => {
     assert.equal(Number.isInteger(result.deleteTiming.transaction), true, 'Delete transaction completion should be observed');
     assert.ok(result.deleteTiming.transaction < result.deleteTiming.response, 'Delete response must wait for the transaction to commit');
     assert.equal(result.afterDeleteCount, 9);
+    assert.equal(result.restored, true);
+    assert.equal(result.restoredIds[0], 'capture-11', 'undo should restore the same capture identity and ordering');
     assert.equal(result.afterClearCount, 0);
   });
 });

@@ -13,6 +13,7 @@ export const CAPTURE_HISTORY_POLICY = Object.freeze({
   maxCaptureBytes: 64 * 1024 * 1024,
   maxTotalBytes: 256 * 1024 * 1024,
   chunkBytes: 3 * 256 * 1024,
+  undoMilliseconds: 5000,
 });
 
 export interface CaptureHistoryItem {
@@ -53,7 +54,7 @@ export interface CaptureSettings {
 }
 
 export const CONTENT_SCRIPT_PROTOCOL = 10;
-export const BACKGROUND_PROTOCOL = 2;
+export const BACKGROUND_PROTOCOL = 3;
 
 export interface ResolvedImageResource {
   url: string;
@@ -83,6 +84,7 @@ export type ExtensionMessage =
   | { type: 'DOMSHOT_HISTORY_GET'; id: string }
   | { type: 'DOMSHOT_HISTORY_READ'; id: string; offset: number; length: number }
   | { type: 'DOMSHOT_HISTORY_DELETE'; id: string }
+  | { type: 'DOMSHOT_HISTORY_RESTORE'; id: string }
   | { type: 'DOMSHOT_HISTORY_CLEAR' };
 
 export interface ExtensionResponseMap {
@@ -107,6 +109,7 @@ export interface ExtensionResponseMap {
   DOMSHOT_HISTORY_GET: { capture: CaptureHistoryTransfer | null };
   DOMSHOT_HISTORY_READ: { data: string };
   DOMSHOT_HISTORY_DELETE: { ok: boolean };
+  DOMSHOT_HISTORY_RESTORE: { ok: boolean };
   DOMSHOT_HISTORY_CLEAR: { ok: boolean };
 }
 

@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "changed",
+  "scope": "history",
+  "summary": "Make the inline clear-all confirmation announce its consequence and cancel when focus returns to other history actions"
+}

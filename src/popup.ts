@@ -1,12 +1,12 @@
 import type { CaptureHistoryDetail, CaptureHistoryItem, CaptureSettings, ExtensionMessage } from './types';
 import { BACKGROUND_PROTOCOL, CAPTURE_HISTORY_POLICY, CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import type { LanguagePreference, UiLocale } from './types';
-import { loadLanguagePreference, localizeDocument, resolveLocale, saveLanguagePreference, t } from './i18n';
+import { loadLanguagePreference, localizeDocument, plural, resolveLocale, saveLanguagePreference, t } from './i18n';
 import type { ThemePreference, UiTheme } from './types';
 import { applyDocumentTheme, loadThemePreference, resolveTheme, saveThemePreference } from './theme';
 import { bindCaptureResultActions } from './capture-result';
 import type { CaptureResultActions, CaptureResultAsset } from './capture-result';
-import { clearCaptureHistory, deleteCaptureHistory, getCaptureHistory, listCaptureHistory } from './history-client';
+import { clearCaptureHistory, deleteCaptureHistory, getCaptureHistory, listCaptureHistory, restoreCaptureHistory } from './history-client';
 import { sendExtensionMessage } from './messaging';
 import { formatBytes } from './format';
 import './popup.css';
@@ -43,15 +43,17 @@ const detailImage = document.querySelector<HTMLImageElement>('#detailImage')!;
 const detailTitle = document.querySelector<HTMLElement>('#detailTitle')!;
 const detailMeta = document.querySelector<HTMLElement>('#detailMeta')!;
 const detailDeleteButton = document.querySelector<HTMLButtonElement>('#detailDeleteButton')!;
-const historyDisableDialog = document.querySelector<HTMLDialogElement>('#historyDisableDialog')!;
-const keepExistingCaptures = document.querySelector<HTMLButtonElement>('#keepExistingCaptures')!;
-const deleteSavedCaptures = document.querySelector<HTMLButtonElement>('#deleteSavedCaptures')!;
+const historyPreferenceStatus = document.querySelector<HTMLElement>('#historyPreferenceStatus')!;
+const historyPreferenceMessage = document.querySelector<HTMLElement>('#historyPreferenceMessage')!;
+const clearSavedCaptures = document.querySelector<HTMLButtonElement>('#clearSavedCaptures')!;
 let activeLocale: UiLocale = resolveLocale('auto');
 let activeTheme: UiTheme = resolveTheme('auto');
 let captures: CaptureHistoryItem[] = [];
 let activeCapture: CaptureHistoryDetail | null = null;
 let activeCaptureUrl: string | null = null;
-let clearConfirmationTimer: number | undefined;
+let clearConfirmation: { button: HTMLButtonElement; idleLabel: string; prompt: string; timer: number } | null = null;
+let historyUndoToast: HTMLElement | null = null;
+let historyUndoTimer: number | undefined;
 let historyActionCleanups: Array<() => void> = [];
 let detailResultActions: CaptureResultActions | null = null;
 
@@ -119,12 +121,20 @@ function updateFilenameHint(mode: CaptureSettings['filenameMode']) {
 function updateHistoryPreferenceCopy() {
   historyStorageStatus.textContent = t(activeLocale, saveRecentCaptures.checked ? 'historyLocal' : 'historySavingOff');
   historyEmptyHint.textContent = t(activeLocale, saveRecentCaptures.checked ? 'historyEmptyHint' : 'historyEmptyHintOff');
+  updateHistoryPreferenceStatus();
 }
 
-function showHistoryDisableDialog() {
-  if (historyDisableDialog.open) return;
-  historyDisableDialog.showModal();
-  requestAnimationFrame(() => keepExistingCaptures.focus());
+function updateHistoryPreferenceStatus() {
+  const enabled = saveRecentCaptures.checked;
+  const hasCaptures = captures.length > 0;
+  historyPreferenceStatus.dataset.state = enabled ? 'enabled' : hasCaptures ? 'disabled-with-captures' : 'disabled-empty';
+  historyPreferenceMessage.textContent = enabled
+    ? t(activeLocale, 'historyPreferenceEnabled')
+    : hasCaptures
+      ? plural(activeLocale, 'historyPreferenceDisabledOne', 'historyPreferenceDisabledMany', captures.length)
+      : t(activeLocale, 'historyPreferenceDisabledEmpty');
+  clearSavedCaptures.hidden = enabled || !hasCaptures;
+  if (clearSavedCaptures.hidden && clearConfirmation?.button === clearSavedCaptures) resetClearConfirmation();
 }
 
 function applyLanguagePreference(preference: LanguagePreference) {
@@ -169,6 +179,7 @@ function renderHistory() {
   historyEmpty.hidden = captures.length !== 0;
   clearHistoryButton.hidden = captures.length === 0;
   for (const capture of captures) historyList.append(createHistoryCard(capture));
+  updateHistoryPreferenceStatus();
 }
 
 function createHistoryCard(capture: CaptureHistoryItem): HTMLElement {
@@ -248,11 +259,12 @@ async function openHistoryDetail(id: string) {
 }
 
 async function deleteCapture(id: string) {
+  const label = captures.find((capture) => capture.id === id)?.label ?? activeCapture?.label ?? t(activeLocale, 'recentCaptures');
   try { await deleteCaptureHistory(id); } catch { status.textContent = t(activeLocale, 'historyActionFailed'); return; }
   captures = captures.filter((capture) => capture.id !== id);
   if (activeCapture?.id === id) closeHistoryDetail();
   renderHistory();
-  status.textContent = t(activeLocale, 'captureDeleted');
+  showHistoryUndo(id, label);
 }
 
 function closeHistoryDetail() {
@@ -263,6 +275,83 @@ function closeHistoryDetail() {
   if (activeCaptureUrl) URL.revokeObjectURL(activeCaptureUrl);
   activeCaptureUrl = null;
   activeCapture = null;
+}
+
+function resetClearConfirmation(restoreStatus = true) {
+  const current = clearConfirmation;
+  if (!current) return;
+  window.clearTimeout(current.timer);
+  delete current.button.dataset.confirm;
+  current.button.textContent = current.idleLabel;
+  current.button.removeAttribute('aria-label');
+  clearConfirmation = null;
+  if (restoreStatus && status.textContent === current.prompt) {
+    status.textContent = t(activeLocale, 'readyLocal');
+  }
+}
+
+function beginClearConfirmation(button: HTMLButtonElement, idleLabel: string, prompt: string) {
+  resetClearConfirmation(false);
+  button.dataset.confirm = 'true';
+  button.textContent = t(activeLocale, 'confirmClear');
+  button.setAttribute('aria-label', prompt);
+  status.textContent = prompt;
+  clearConfirmation = { button, idleLabel, prompt, timer: window.setTimeout(() => resetClearConfirmation(), 3000) };
+}
+
+function requestClearHistory(button: HTMLButtonElement, idleLabel: string, prompt: string) {
+  if (clearConfirmation?.button !== button || button.dataset.confirm !== 'true') {
+    beginClearConfirmation(button, idleLabel, prompt);
+    return;
+  }
+  resetClearConfirmation(false);
+  dismissHistoryUndo();
+  button.disabled = true;
+  void clearCaptureHistory().then(() => {
+    captures = [];
+    closeHistoryDetail();
+    renderHistory();
+    status.textContent = t(activeLocale, 'historyCleared');
+  }, () => { status.textContent = t(activeLocale, 'historyActionFailed'); })
+    .finally(() => { button.disabled = false; });
+}
+
+function showHistoryUndo(id: string, label: string) {
+  dismissHistoryUndo();
+  const toast = document.createElement('div');
+  toast.className = 'history-undo-toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  toast.setAttribute('aria-atomic', 'true');
+  const message = document.createElement('span');
+  message.textContent = t(activeLocale, 'captureDeletedUndo', { label });
+  const undo = document.createElement('button');
+  undo.type = 'button';
+  undo.textContent = t(activeLocale, 'undoDelete');
+  undo.addEventListener('click', async () => {
+    undo.disabled = true;
+    try {
+      await restoreCaptureHistory(id);
+      await loadHistory(false);
+      dismissHistoryUndo();
+      status.textContent = t(activeLocale, 'captureRestored');
+    } catch {
+      undo.disabled = false;
+      status.textContent = t(activeLocale, 'historyActionFailed');
+    }
+  });
+  toast.append(message, undo);
+  document.querySelector('.shell')!.append(toast);
+  historyUndoToast = toast;
+  historyUndoTimer = window.setTimeout(dismissHistoryUndo, Math.max(0, CAPTURE_HISTORY_POLICY.undoMilliseconds - 500));
+  undo.focus();
+}
+
+function dismissHistoryUndo() {
+  window.clearTimeout(historyUndoTimer);
+  historyUndoTimer = undefined;
+  historyUndoToast?.remove();
+  historyUndoToast = null;
 }
 
 async function loadHistoryAsset(id: string): Promise<CaptureResultAsset> {
@@ -329,12 +418,8 @@ document.querySelectorAll<HTMLInputElement>('input:not([name="language"]):not([n
     await chrome.storage.sync.set({ captureSettings: settings });
     if (input === saveRecentCaptures) {
       status.textContent = t(activeLocale, settings.saveRecentCaptures ? 'historySavingEnabled' : 'historySavingDisabled');
-      if (settings.saveRecentCaptures) {
-        if (historyDisableDialog.open) historyDisableDialog.close();
-      } else {
-        await loadHistory(false);
-        if (captures.length > 0) showHistoryDisableDialog();
-      }
+      if (!settings.saveRecentCaptures) await loadHistory(false);
+      updateHistoryPreferenceStatus();
     }
   });
 });
@@ -377,6 +462,7 @@ historyButton.addEventListener('click', () => {
   requestAnimationFrame(() => historyBackButton.focus());
 });
 historyBackButton.addEventListener('click', () => {
+  resetClearConfirmation();
   historyPanel.hidden = true;
   homePanel.hidden = false;
   requestAnimationFrame(() => historyButton.focus());
@@ -387,47 +473,18 @@ detailBackButton.addEventListener('click', () => {
 });
 detailDeleteButton.addEventListener('click', () => { if (activeCapture) void deleteCapture(activeCapture.id); });
 clearHistoryButton.addEventListener('click', () => {
-  if (clearHistoryButton.dataset.confirm !== 'true') {
-    clearHistoryButton.dataset.confirm = 'true';
-    clearHistoryButton.textContent = t(activeLocale, 'confirmClear');
-    window.clearTimeout(clearConfirmationTimer);
-    clearConfirmationTimer = window.setTimeout(() => {
-      delete clearHistoryButton.dataset.confirm;
-      clearHistoryButton.textContent = t(activeLocale, 'clearAll');
-    }, 3000);
-    return;
+  requestClearHistory(clearHistoryButton, t(activeLocale, 'clearAll'), t(activeLocale, 'confirmClearPrompt'));
+});
+clearSavedCaptures.addEventListener('click', () => {
+  requestClearHistory(clearSavedCaptures, t(activeLocale, 'clearSavedCaptures'), t(activeLocale, 'confirmClearSavedPrompt'));
+});
+document.addEventListener('pointerdown', (event) => {
+  if (clearConfirmation && event.target instanceof Node && !clearConfirmation.button.contains(event.target)) {
+    resetClearConfirmation();
   }
-  void clearCaptureHistory().then(() => {
-    captures = []; closeHistoryDetail(); renderHistory(); status.textContent = t(activeLocale, 'historyCleared');
-  }, () => { status.textContent = t(activeLocale, 'historyActionFailed'); });
-});
-keepExistingCaptures.addEventListener('click', () => {
-  historyDisableDialog.close();
-  status.textContent = t(activeLocale, 'historySavingDisabled');
-});
-deleteSavedCaptures.addEventListener('click', async () => {
-  keepExistingCaptures.disabled = true;
-  deleteSavedCaptures.disabled = true;
-  try {
-    await ensureBackgroundReady();
-    await clearCaptureHistory();
-    captures = [];
-    closeHistoryDetail();
-    renderHistory();
-    historyDisableDialog.close();
-    status.textContent = t(activeLocale, 'historyCleared');
-  } catch {
-    historyDisableDialog.close();
-    status.textContent = t(activeLocale, 'historyActionFailed');
-  } finally {
-    keepExistingCaptures.disabled = false;
-    deleteSavedCaptures.disabled = false;
-  }
-});
-historyDisableDialog.addEventListener('cancel', () => {
-  status.textContent = t(activeLocale, 'historySavingDisabled');
 });
 backButton.addEventListener('click', () => {
+  resetClearConfirmation();
   settingsPanel.hidden = true;
   homePanel.hidden = false;
   requestAnimationFrame(() => settingsButton.focus());

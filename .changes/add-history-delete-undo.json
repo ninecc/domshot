@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "changed",
+  "scope": "history",
+  "summary": "Let users undo an individual recent-capture deletion without adding a confirmation dialog"
+}

@@ -75,6 +75,10 @@
           <div class="setting-row"><span data-i18n="afterCapture">After capture</span><div class="segment after-capture-segment" role="radiogroup" aria-label="After capture" data-i18n-aria-label="afterCapture"><label><input type="radio" name="afterCapture" value="preview" checked /><span data-i18n="showPreview">Preview</span></label><label><input type="radio" name="afterCapture" value="copy" /><span data-i18n="autoCopy">Copy</span></label><label><input type="radio" name="afterCapture" value="download" /><span data-i18n="autoDownload">Download</span></label></div></div>
           <div class="filename-setting"><div class="setting-row"><span data-i18n="filenameMode">File names</span><div class="segment filename-segment" role="radiogroup" aria-label="File names" data-i18n-aria-label="filenameMode"><label><input type="radio" name="filenameMode" value="smart" checked /><span data-i18n="smartFilename">Smart</span></label><label><input type="radio" name="filenameMode" value="page-title" /><span data-i18n="pageTitleFilename">Page title</span></label><label><input type="radio" name="filenameMode" value="timestamp" /><span data-i18n="timestampFilename">Timestamp</span></label></div></div><p class="setting-hint" id="filenameHint" data-i18n="smartFilenameDesc">Uses the page title for full pages and the element name for selections.</p></div>
           <label class="toggle-row history-preference"><span><strong data-i18n="saveRecentCaptures">Add captures to history automatically</strong><small data-i18n="saveRecentCapturesDesc">Keep recent captures in this browser</small></span><input id="saveRecentCaptures" type="checkbox" /><i aria-hidden="true"></i></label>
+          <div class="history-preference-status" id="historyPreferenceStatus" data-state="disabled-empty">
+            <span id="historyPreferenceMessage" role="status" aria-live="polite" aria-atomic="true" data-i18n="historyPreferenceDisabledEmpty">Off · No saved captures</span>
+            <button id="clearSavedCaptures" type="button" data-i18n="clearSavedCaptures" hidden>Clear saved</button>
+          </div>
         </section>
 
         <section class="settings-group advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
@@ -89,17 +93,6 @@
         </section>
         </div>
       </section>
-
-      <dialog class="history-disable-dialog" id="historyDisableDialog" aria-labelledby="history-disable-title" aria-describedby="history-disable-body">
-        <div class="history-disable-copy">
-          <h2 id="history-disable-title" data-i18n="historyDisableTitle">Stop adding captures automatically?</h2>
-          <p id="history-disable-body" data-i18n="historyDisableBody">Your existing captures will stay in this browser. Delete them now?</p>
-        </div>
-        <div class="history-disable-actions">
-          <button id="keepExistingCaptures" type="button" data-i18n="keepExistingCaptures">Keep captures</button>
-          <button class="danger" id="deleteSavedCaptures" type="button" data-i18n="deleteSavedCaptures">Delete captures</button>
-        </div>
-      </dialog>
 
       <footer class="popup-footer">
         <p class="status" id="status" role="status"><span aria-hidden="true">●</span> <span class="status-copy" data-i18n="readyLocal">Ready · Processing stays on this device</span></p>

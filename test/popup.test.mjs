@@ -27,10 +27,10 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       }];
       Object.defineProperty(chrome, 'runtime', { configurable: true, value: {
         async sendMessage(message) {
-          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 2 };
-          if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: globalThis.__historyStore.map(({ dataBase64, ...capture }) => capture) };
+          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 3 };
+          if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: globalThis.__historyStore.filter((capture) => !capture.deleted).map(({ dataBase64, deleted, ...capture }) => capture) };
           if (message.type === 'DOMSHOT_HISTORY_GET') {
-            const stored = globalThis.__historyStore.find((capture) => capture.id === message.id);
+            const stored = globalThis.__historyStore.find((capture) => capture.id === message.id && !capture.deleted);
             if (!stored) return { capture: null };
             const { dataBase64, ...capture } = stored;
             return { capture: { ...capture, mimeType: 'image/png', byteLength: atob(dataBase64).length } };
@@ -40,7 +40,8 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
             const binary = atob(stored.dataBase64).slice(message.offset, message.offset + message.length);
             return { data: btoa(binary) };
           }
-          if (message.type === 'DOMSHOT_HISTORY_DELETE') { globalThis.__historyStore = globalThis.__historyStore.filter((capture) => capture.id !== message.id); return { ok: true }; }
+          if (message.type === 'DOMSHOT_HISTORY_DELETE') { const capture = globalThis.__historyStore.find((item) => item.id === message.id); if (capture) capture.deleted = true; return { ok: Boolean(capture) }; }
+          if (message.type === 'DOMSHOT_HISTORY_RESTORE') { const capture = globalThis.__historyStore.find((item) => item.id === message.id); if (capture) delete capture.deleted; return { ok: Boolean(capture) }; }
           if (message.type === 'DOMSHOT_HISTORY_CLEAR') { globalThis.__historyStore = []; return { ok: true }; }
         }
       } });
@@ -387,33 +388,38 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     const capturesBeforePreferenceChange = await page.evaluate(`globalThis.__historyStore.length`);
     await page.evaluate(`document.querySelector('#saveRecentCaptures').click()`);
     await page.waitUntil(`globalThis.__syncStore.captureSettings?.saveRecentCaptures === true`, 'recent capture preference was not enabled');
+    assert.equal(await page.evaluate(`document.querySelector('#historyPreferenceStatus').dataset.state`), 'enabled');
+    assert.equal(await page.evaluate(`document.querySelector('#clearSavedCaptures').hidden`), true, 'enabled history should not prompt for cleanup');
     await page.evaluate(`document.querySelector('#saveRecentCaptures').click()`);
-    await page.waitUntil(`document.querySelector('#historyDisableDialog').open`, 'existing captures did not trigger the delete choice');
+    await page.waitUntil(`document.querySelector('#historyPreferenceStatus').dataset.state === 'disabled-with-captures'`, 'disabled history did not explain retained captures');
     const historyPreference = await page.evaluate(`({
       enabled: true,
       disabled: globalThis.__syncStore.captureSettings?.saveRecentCaptures,
       existingCaptures: globalThis.__historyStore.length,
-      dialogTitle: document.querySelector('#history-disable-title').textContent,
-      dialogBody: document.querySelector('#history-disable-body').textContent,
-      actions: [...document.querySelectorAll('.history-disable-actions button')].map((button) => button.textContent)
+      dialogExists: Boolean(document.querySelector('#historyDisableDialog')),
+      message: document.querySelector('#historyPreferenceMessage').textContent,
+      clearLabel: document.querySelector('#clearSavedCaptures').textContent,
+      clearHidden: document.querySelector('#clearSavedCaptures').hidden
     })`);
     assert.equal(historyPreference.enabled, true);
     assert.equal(historyPreference.disabled, false);
-    assert.equal(historyPreference.existingCaptures, capturesBeforePreferenceChange, 'turning off recent captures must not delete existing items before the user chooses');
-    assert.equal(historyPreference.dialogTitle, '停止自动加入新截图？');
-    assert.match(historyPreference.dialogBody, /是否同时删除/);
-    assert.deepEqual(historyPreference.actions, ['保留已有截图', '删除已有截图']);
-    const deleteChoiceIdle = await buttonMetrics(page, '#deleteSavedCaptures');
-    await page.hover('#deleteSavedCaptures');
-    await page.waitUntil(`getComputedStyle(document.querySelector('#deleteSavedCaptures')).backgroundColor !== ${JSON.stringify(deleteChoiceIdle.backgroundColor)}`, 'delete history choice did not react on hover');
-    const deleteChoiceHovered = await buttonMetrics(page, '#deleteSavedCaptures');
-    assert.notEqual(deleteChoiceHovered.backgroundColor, deleteChoiceIdle.backgroundColor);
+    assert.equal(historyPreference.existingCaptures, capturesBeforePreferenceChange, 'turning off recent captures must preserve existing items by default');
+    assert.equal(historyPreference.dialogExists, false, 'a reversible preference change should not open a modal');
+    assert.match(historyPreference.message, new RegExp(String(capturesBeforePreferenceChange)));
+    assert.equal(historyPreference.clearLabel, '清空已有截图');
+    assert.equal(historyPreference.clearHidden, false);
+    const deleteChoiceIdle = await buttonMetrics(page, '#clearSavedCaptures');
+    await page.hover('#clearSavedCaptures');
+    await page.waitUntil(`getComputedStyle(document.querySelector('#clearSavedCaptures')).color !== ${JSON.stringify(deleteChoiceIdle.color)}`, 'clear saved captures did not react on hover');
+    const deleteChoiceHovered = await buttonMetrics(page, '#clearSavedCaptures');
     assert.notEqual(deleteChoiceHovered.color, deleteChoiceIdle.color);
     assert.deepEqual(deleteChoiceHovered.rect, deleteChoiceIdle.rect, 'delete history choice must not move on hover');
-    await page.evaluate(`document.querySelector('#keepExistingCaptures').click()`);
-    await page.waitUntil(`!document.querySelector('#historyDisableDialog').open`, 'history choice did not close');
+    await page.evaluate(`document.querySelector('#clearSavedCaptures').click()`);
+    assert.equal(await page.evaluate(`document.querySelector('#clearSavedCaptures').textContent`), '确认清空');
+    assert.match(await page.evaluate(`document.querySelector('#status').textContent`), /再次点击/);
+    await page.evaluate(`document.querySelector('#general-title').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+    assert.equal(await page.evaluate(`document.querySelector('#clearSavedCaptures').textContent`), '清空已有截图');
     assert.equal(await page.evaluate(`globalThis.__historyStore.length`), capturesBeforePreferenceChange);
-    assert.match(await page.evaluate(`document.querySelector('#status').textContent`), /已有截图保持不变/);
     const savedAdvancedSettings = await page.evaluate(`(() => {
       document.querySelector('#outerShadows').click();
       document.querySelector('#compressImages').click();
@@ -522,6 +528,31 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.deepEqual(clearHovered.rect, clearIdle.rect, 'clear history button must not move on hover');
     assert.equal(clearHovered.backgroundColor, clearIdle.backgroundColor, 'clear history hover should remain visually lightweight');
 
+    await page.evaluate(`document.querySelector('#clearHistoryButton').click()`);
+    const clearConfirmation = await page.evaluate(`(() => {
+      const button = document.querySelector('#clearHistoryButton');
+      const rect = button.getBoundingClientRect();
+      return {
+        confirming: button.dataset.confirm,
+        label: button.textContent,
+        announcement: document.querySelector('#status').textContent,
+        rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+      };
+    })()`);
+    assert.equal(clearConfirmation.confirming, 'true');
+    assert.equal(clearConfirmation.label, '确认清空');
+    assert.match(clearConfirmation.announcement, /再次点击/);
+    assertLayoutsClose(clearConfirmation.rect, clearIdle.rect);
+
+    await page.evaluate(`document.querySelector('.history-summary').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
+    assert.equal(await page.evaluate(`document.querySelector('#clearHistoryButton').dataset.confirm`), undefined, 'Clicking outside should cancel clear confirmation');
+    assert.equal(await page.evaluate(`document.querySelector('#clearHistoryButton').textContent`), '全部清空');
+
+    await page.evaluate(`document.querySelector('#clearHistoryButton').click(); document.querySelector('#historyBackButton').click()`);
+    assert.equal(await page.evaluate(`document.querySelector('#clearHistoryButton').dataset.confirm`), undefined, 'Leaving history should cancel clear confirmation');
+    await page.evaluate(`document.querySelector('#historyButton').click()`);
+    await page.waitUntil(`document.querySelectorAll('.history-card').length === 1`, 'recent capture did not render after returning');
+
     const cueIdleOpacity = await page.evaluate(`getComputedStyle(document.querySelector('.history-preview-cue')).opacity`);
     await page.hover('.history-thumb');
     await page.waitUntil(`getComputedStyle(document.querySelector('.history-preview-cue')).opacity === '1'`, 'thumbnail preview cue did not appear on hover');
@@ -590,6 +621,18 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
 
     await page.evaluate(`document.querySelector('#detailDeleteButton').click()`);
     await page.waitUntil(`document.querySelectorAll('.history-card').length === 0`, 'deleted history item remained visible');
+    const undo = await page.evaluate(`(() => {
+      const toast = document.querySelector('.history-undo-toast');
+      return { visible: Boolean(toast), message: toast?.querySelector('span').textContent || '', action: toast?.querySelector('button').textContent || '' };
+    })()`);
+    assert.equal(undo.visible, true, 'single-capture deletion should offer undo');
+    assert.match(undo.message, /Pricing card/);
+    assert.equal(undo.action, '撤销');
+    await page.evaluate(`document.querySelector('.history-undo-toast button').click()`);
+    await page.waitUntil(`document.querySelectorAll('.history-card').length === 1`, 'undo did not restore the deleted capture');
+    assert.match(await page.evaluate(`document.querySelector('#status').textContent`), /已恢复/);
+    await page.evaluate(`document.querySelector('.history-delete').click()`);
+    await page.waitUntil(`document.querySelectorAll('.history-card').length === 0`, 'history item remained after deleting it again');
     assert.equal(await page.evaluate(`document.querySelector('#historyEmpty').hidden`), false);
     const emptyState = await page.evaluate(`(() => {
       const panel = document.querySelector('#historyPanel').getBoundingClientRect();
@@ -619,7 +662,7 @@ test('popup rejects a stale background before offering history actions', async (
       Object.defineProperty(chrome, 'i18n', { configurable: true, value: { getUILanguage: () => 'en-US' } });
       Object.defineProperty(chrome, 'runtime', { configurable: true, value: {
         async sendMessage(message) {
-          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 1 };
+          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 2 };
           if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: [{
             id: 'legacy-capture', createdAt: 1, label: 'Legacy capture', filename: 'legacy.png', format: 'png',
             width: 100, height: 80, scale: 1, size: 1, sourceHost: 'example.com', thumbnailDataUrl: 'data:image/png;base64,AA=='
