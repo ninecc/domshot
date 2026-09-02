@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "added",
+  "scope": "history",
+  "summary": "Optionally keep up to 10 recent captures locally, with saving off by default, preview and reuse controls, undoable deletion, and clear-all management"
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "fixed",
+  "scope": "history",
+  "summary": "Keep large recent captures available reliably across extension updates, repeated previews, deletion, and recovery"
+}

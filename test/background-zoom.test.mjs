@@ -33,6 +33,8 @@ test('background forwards tab zoom changes to the injected content script', asyn
   assert.equal(messages[0].tabId, 42);
   assert.equal(messages[0].message.type, 'DOMSHOT_ZOOM_CHANGED');
   assert.equal(messages[0].message.pageZoom, 0.33);
+  const ready = await invokeMessage(onMessage, { type: 'DOMSHOT_BACKGROUND_PING' });
+  assert.equal(ready.protocol, 3);
 });
 
 test('background resolves permitted images and persists an exact-origin permission request', async () => {
@@ -87,15 +89,16 @@ test('background resolves permitted images and persists an exact-origin permissi
     token: 'retry-1',
     origins: ['https://blocked.example', 'https://blocked.example'],
     locale: 'en',
+    theme: 'dark',
   }, { tab: { id: 27 } });
   assert.equal(prepared.prepared, true);
-  assertPermissionUrl(prepared.frameUrl, { mode: 'inline', lang: 'en', token: 'retry-1' });
+  assertPermissionUrl(prepared.frameUrl, { mode: 'inline', lang: 'en', theme: 'dark', token: 'retry-1' });
   const pending = await invokeMessage(onMessage, { type: 'DOMSHOT_GET_IMAGE_PERMISSION', token: 'retry-1' });
   assert.deepEqual(Array.from(pending.patterns), ['https://blocked.example/*']);
 
   const opened = await invokeMessage(onMessage, { type: 'DOMSHOT_OPEN_IMAGE_PERMISSION', token: 'retry-1' });
   assert.equal(opened.opened, true);
-  assertPermissionUrl(openedWindow.url, { lang: 'en', token: 'retry-1' });
+  assertPermissionUrl(openedWindow.url, { lang: 'en', theme: 'dark', token: 'retry-1' });
 
   allowedPatterns.add('https://blocked.example/*');
   const completed = await invokeMessage(onMessage, { type: 'DOMSHOT_COMPLETE_IMAGE_PERMISSION', token: 'retry-1' });

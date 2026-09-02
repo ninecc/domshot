@@ -14,10 +14,23 @@ test('content preview remains stable across script updates and zoom changes', as
     await context.test('replaces a stale injected content script', async () => {
       await page.evaluate(`
         window.__domShotLoaded = true;
+        globalThis.__domshotRevokedObjectUrls = [];
+        const revokeObjectUrl = URL.revokeObjectURL.bind(URL);
+        URL.revokeObjectURL = (url) => {
+          globalThis.__domshotRevokedObjectUrls.push(url);
+          revokeObjectUrl(url);
+        };
         chrome.runtime = {
           onMessage: {
             addListener(listener) { globalThis.__domshotListener = listener; },
             removeListener() {}
+          },
+          async sendMessage(message) {
+            globalThis.__domshotHistoryMessages ??= [];
+            if (message.type.startsWith('DOMSHOT_HISTORY_')) {
+              globalThis.__domshotHistoryMessages.push({ type: message.type, index: message.index, dataLength: message.data?.length });
+              return { ok: true };
+            }
           }
         }`);
       await page.evaluate(contentBundle);
@@ -34,6 +47,44 @@ test('content preview remains stable across script updates and zoom changes', as
       assert.doesNotMatch(`${labels.title} ${labels.copy}`, /[\u4e00-\u9fff]/, 'English capture controls should not contain Chinese copy');
     });
 
+    await context.test('disposes a preview when another extension surface replaces it', async () => {
+      await capturePage(page, 1, 'en');
+      const revokedBefore = await page.evaluate(`globalThis.__domshotRevokedObjectUrls.length`);
+      await capturePage(page, 1, 'en');
+      const revokedAfter = await page.evaluate(`globalThis.__domshotRevokedObjectUrls.length`);
+      assert.equal(revokedAfter, revokedBefore + 1, 'Replacing a preview must release its image URL');
+    });
+
+    await context.test('opens and closes the preview as a keyboard-operable dialog', async () => {
+      await capturePage(page, 1, 'en');
+      const dialog = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        const close = shadow.querySelector('.close');
+        const rect = close.getBoundingClientRect();
+        return { focused: shadow.activeElement === close, width: rect.width, height: rect.height };
+      })()`);
+      assert.equal(dialog.focused, true, 'The preview should move focus to its close control');
+      assert.ok(dialog.width >= 32 && dialog.height >= 32, `Preview close target is only ${dialog.width} × ${dialog.height}px`);
+      await page.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`);
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root')`), null, 'Escape should close the preview');
+    });
+
+    await context.test('applies the requested theme to in-page UI', async () => {
+      await capturePage(page, 1, 'en', 'light');
+      const light = await page.evaluate(`(() => {
+        const host = document.querySelector('#domshot-extension-root');
+        return { theme: host.dataset.domshotTheme, background: getComputedStyle(host.shadowRoot.querySelector('.preview-card')).backgroundColor };
+      })()`);
+      await capturePage(page, 1, 'en', 'dark');
+      const dark = await page.evaluate(`(() => {
+        const host = document.querySelector('#domshot-extension-root');
+        return { theme: host.dataset.domshotTheme, background: getComputedStyle(host.shadowRoot.querySelector('.preview-card')).backgroundColor };
+      })()`);
+      assert.equal(light.theme, 'light');
+      assert.equal(dark.theme, 'dark');
+      assert.notEqual(dark.background, light.background);
+    });
+
     await context.test('captures only the current visible viewport', async () => {
       await page.setPageScale(1);
       await page.evaluate('scrollTo(0, 400)');
@@ -46,6 +97,53 @@ test('content preview remains stable across script updates and zoom changes', as
       })()`);
       assert.deepEqual(imageSize, viewport);
       await page.evaluate('scrollTo(0, 0)');
+    });
+
+    await context.test('does not save captures to history by default', async () => {
+      await page.evaluate(`globalThis.__domshotHistoryMessages = []`);
+      await requestVisibleArea(page);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Capture preview did not appear');
+      assert.deepEqual(await page.evaluate(`globalThis.__domshotHistoryMessages`), []);
+    });
+
+    await context.test('streams captures to history without one oversized message when enabled', async () => {
+      await page.evaluate(`globalThis.__domshotHistoryMessages = []`);
+      await requestVisibleArea(page, { saveRecentCaptures: true });
+      await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_COMMIT')`, 'Capture history upload did not complete');
+      const historyMessages = await page.evaluate(`globalThis.__domshotHistoryMessages`);
+      assert.equal(historyMessages[0].type, 'DOMSHOT_HISTORY_BEGIN');
+      assert.equal(historyMessages.at(-1).type, 'DOMSHOT_HISTORY_COMMIT');
+      assert.ok(historyMessages.some((message) => message.type === 'DOMSHOT_HISTORY_CHUNK'));
+      assert.equal(historyMessages.some((message) => message.type === 'DOMSHOT_HISTORY_SAVE'), false);
+      assert.ok(historyMessages.filter((message) => message.dataLength).every((message) => message.dataLength < 2 * 1024 * 1024));
+    });
+
+    await context.test('lets the current preview remove and restore its history entry', async () => {
+      await requestFullPage(page, { saveRecentCaptures: true }, 'zh-CN');
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Preview did not appear');
+      const initial = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        return { status: shadow.querySelector('.history-retention-status').textContent, action: shadow.querySelector('.history-retention-toggle').textContent };
+      })()`);
+      assert.equal(initial.status, '✓ 已保存到截图历史');
+      assert.equal(initial.action, '从截图历史中移除');
+
+      await page.evaluate(`globalThis.__domshotHistoryMessages = []; document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-toggle').click()`);
+      await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_DELETE')`, 'Current capture was not removed from history');
+      const removed = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        return { status: shadow.querySelector('.history-retention-status').textContent, action: shadow.querySelector('.history-retention-toggle').textContent };
+      })()`);
+      assert.equal(removed.status, '已从截图历史中移除 · 仍可复制或下载');
+      assert.equal(removed.action, '重新保存到历史');
+      assert.equal(await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        return !shadow.querySelector('.copy').disabled && !shadow.querySelector('.download').disabled;
+      })()`), true, 'removing a capture from history must not disable copy or download');
+
+      await page.evaluate(`globalThis.__domshotHistoryMessages = []; document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-toggle').click()`);
+      await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_COMMIT')`, 'Current capture was not restored to history');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-status').textContent`), '✓ 已保存到截图历史');
     });
 
     await context.test('runs the configured post-capture action with safe preview fallback', async () => {
@@ -62,6 +160,10 @@ test('content preview remains stable across script updates and zoom changes', as
       await requestFullPage(page, { afterCapture: 'copy', outerShadows: true, compress: false });
       await page.waitUntil(`globalThis.__domshotCopiedItems?.length === 1`, 'Automatic copy did not write the image');
       assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi`), 'toast');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('button').textContent`), '保存到截图历史');
+      await page.evaluate(`globalThis.__domshotHistoryMessages = []; document.querySelector('#domshot-extension-root').shadowRoot.querySelector('button').click()`);
+      await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_COMMIT')`, 'Automatic-copy toast did not save the capture on demand');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('strong').textContent`), '已保存到截图历史');
 
       await page.evaluate(`document.title = 'Résumé 日本語'; HTMLAnchorElement.prototype.click = function () { globalThis.__domshotDownload = this.download; }`);
       await requestFullPage(page, { afterCapture: 'download', filenameMode: 'page-title' });
@@ -159,8 +261,46 @@ test('content preview remains stable across script updates and zoom changes', as
           value: class ClipboardItem { constructor(items) { this.items = items; } }
         });
       })()`);
-      await capturePage(page, 1);
+      await capturePage(page, 1, 'zh-CN', 'dark');
       const beforeHeight = await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card').getBoundingClientRect().height`);
+
+      const closeBefore = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.close');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { hasSvg: Boolean(button.querySelector('svg')), color: style.color, backgroundColor: style.backgroundColor, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      await page.moveMouse(closeBefore.rect.left + closeBefore.rect.width / 2, closeBefore.rect.top + closeBefore.rect.height / 2);
+      await page.nextFrames();
+      const closeHovered = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.close');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { color: style.color, backgroundColor: style.backgroundColor, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      assert.equal(closeBefore.hasSvg, true);
+      assert.notEqual(closeHovered.color, closeBefore.color);
+      assert.equal(closeHovered.backgroundColor, closeBefore.backgroundColor);
+      assert.deepEqual(closeHovered.rect, closeBefore.rect);
+
+      const copyBefore = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { borderColor: style.borderColor, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      await page.moveMouse(copyBefore.rect.left + copyBefore.rect.width / 2, copyBefore.rect.top + copyBefore.rect.height / 2);
+      await page.nextFrames();
+      const copyHovered = await page.evaluate(`(() => {
+        const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy');
+        const rect = button.getBoundingClientRect();
+        const style = getComputedStyle(button);
+        return { transform: style.transform, borderColor: style.borderColor, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+      })()`);
+      assert.equal(copyHovered.transform, 'none');
+      assert.deepEqual(copyHovered.rect, copyBefore.rect);
+      assert.notEqual(copyHovered.borderColor, copyBefore.borderColor);
+
       await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy').click()`);
       await page.waitUntil(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.copy').classList.contains('is-success')`, 'Copy button did not show success');
       const result = await page.evaluate(`(() => {
@@ -184,7 +324,8 @@ test('content preview remains stable across script updates and zoom changes', as
         const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
         const button = shadow.querySelector('.download');
         const rect = button.getBoundingClientRect();
-        return { cardHeight: shadow.querySelector('.preview-card').getBoundingClientRect().height, filter: getComputedStyle(button).filter, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+        const style = getComputedStyle(button);
+        return { cardHeight: shadow.querySelector('.preview-card').getBoundingClientRect().height, filter: style.filter, borderColor: style.borderColor, borderWidth: style.borderWidth, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
       })()`);
       await page.moveMouse(downloadBefore.rect.left + downloadBefore.rect.width / 2, downloadBefore.rect.top + downloadBefore.rect.height / 2);
       await page.nextFrames();
@@ -192,10 +333,13 @@ test('content preview remains stable across script updates and zoom changes', as
         const button = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.download');
         const rect = button.getBoundingClientRect();
         const style = getComputedStyle(button);
-        return { transform: style.transform, filter: style.filter, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
+        return { transform: style.transform, filter: style.filter, borderColor: style.borderColor, borderWidth: style.borderWidth, rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height } };
       })()`);
       assert.equal(downloadHovered.transform, 'none');
       assert.deepEqual(downloadHovered.rect, downloadBefore.rect);
+      assert.equal(downloadBefore.borderWidth, '1px');
+      assert.equal(downloadHovered.borderWidth, downloadBefore.borderWidth);
+      assert.notEqual(downloadHovered.borderColor, downloadBefore.borderColor);
       assert.notEqual(downloadHovered.filter, downloadBefore.filter, 'download hover should visibly change the primary surface');
 
       await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.download').click()`);
@@ -263,6 +407,7 @@ test('selected element reports cross-origin images that could not be embedded', 
         type: 'DOMSHOT_SELECT',
         settings: { format: 'png', scale: 1, afterCapture: 'download', embedFonts: false, reconcile: false, outerShadows: false, compress: true },
         locale: 'zh-CN',
+        theme: 'light',
         pageZoom: 1
       }, {}, () => {})`);
       await page.evaluate(`(() => {
@@ -290,6 +435,7 @@ test('selected element reports cross-origin images that could not be embedded', 
 
       await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.grant-images').click()`);
       await page.waitUntil(`globalThis.__domshotPermissionRequest?.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION'`, 'Permission request was not prepared');
+      assert.equal(await page.evaluate(`globalThis.__domshotPermissionRequest.theme`), 'light');
       await page.waitUntil(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card').classList.contains('is-authorizing')`, 'Preview card did not enter its inline permission state');
       const authorizationState = await page.evaluate(`(() => {
         const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
@@ -323,29 +469,31 @@ test('selected element reports cross-origin images that could not be embedded', 
   }
 });
 
-async function capturePage(page, pageZoom, locale = 'zh-CN') {
-  await requestFullPage(page, { pageZoom }, locale);
+async function capturePage(page, pageZoom, locale = 'zh-CN', theme = 'light') {
+  await requestFullPage(page, { pageZoom }, locale, theme);
   await page.waitUntil(`(() => {
     const host = document.querySelector('#domshot-extension-root');
     return host?.dataset.domshotUi === 'preview' && Boolean(host.shadowRoot?.querySelector('.preview-card img')?.complete);
   })()`, 'Preview did not become ready');
 }
 
-async function requestFullPage(page, overrides = {}, locale = 'zh-CN') {
+async function requestFullPage(page, overrides = {}, locale = 'zh-CN', theme = 'light') {
   const { pageZoom = 1, ...settings } = overrides;
   await page.evaluate(`globalThis.__domshotListener({
     type: 'DOMSHOT_FULL_PAGE',
-    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
+    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', saveRecentCaptures: false, captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
     locale: ${JSON.stringify(locale)},
+    theme: ${JSON.stringify(theme)},
     pageZoom: ${pageZoom}
   }, {}, () => {})`);
 }
 
-async function requestVisibleArea(page, overrides = {}, locale = 'zh-CN') {
+async function requestVisibleArea(page, overrides = {}, locale = 'zh-CN', theme = 'light') {
   await page.evaluate(`globalThis.__domshotListener({
     type: 'DOMSHOT_VISIBLE_AREA',
-    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...overrides })},
+    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', saveRecentCaptures: false, captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...overrides })},
     locale: ${JSON.stringify(locale)},
+    theme: ${JSON.stringify(theme)},
     pageZoom: 1
   }, {}, () => {})`);
 }

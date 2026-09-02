@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -8,65 +8,110 @@
   </head>
   <body>
     <main class="shell">
-      <section class="panel home-panel" id="homePanel" aria-label="Capture home" data-i18n-aria-label="homeAria">
+      <section class="panel home-panel" id="homePanel" aria-label="Capture options" data-i18n-aria-label="homeAria">
         <header class="masthead">
           <div class="brand" aria-label="DOMShot">
             <img class="brand-mark" src="icon128.png" alt="" aria-hidden="true" />
             <span class="wordmark">DOM<span>Shot</span></span>
           </div>
+          <div class="masthead-actions">
+          <button class="history-button" id="historyButton" type="button" aria-label="Open recent captures" aria-controls="historyPanel" data-i18n-aria-label="openHistory">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V4m0 4h4"/><path d="M4.8 7.2A8.5 8.5 0 1 1 3.6 14"/><path d="M12 7.5V12l3 2"/></svg><span class="history-badge" id="historyBadge" hidden>0</span>
+          </button>
           <button class="settings-button" id="settingsButton" type="button" aria-label="Open settings" aria-controls="settingsPanel" data-i18n-aria-label="openSettings">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg>
           </button>
+          </div>
         </header>
 
-        <section class="intro" aria-labelledby="intro-title"><h1 id="intro-title" data-i18n="introTitle">Capture web content precisely</h1><span data-i18n="introSubtitle">Preserve original styles, fonts, and layout details</span></section>
+        <section class="intro" aria-labelledby="intro-title"><h1 id="intro-title" data-i18n="introTitle">Capture any part of a webpage</h1><span data-i18n="introSubtitle">Keep the original styles, fonts, and layout</span></section>
 
-        <section class="actions" aria-label="Capture actions" data-i18n-aria-label="captureActions">
-          <button class="capture-action primary-action" id="selectElement" type="button"><span class="action-symbol frame-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong data-i18n="selectElement">Capture page element</strong><small data-i18n="selectElementDesc">Hover to select an element, then click to capture</small></span><span class="chevron" aria-hidden="true">›</span></button>
-          <button class="capture-action secondary-action" id="captureVisible" type="button"><span class="action-symbol viewport-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong data-i18n="captureVisible">Capture visible area</strong><small data-i18n="captureVisibleDesc">Save what is currently visible in the viewport</small></span><span class="chevron" aria-hidden="true">›</span></button>
-          <button class="capture-action secondary-action" id="capturePage" type="button"><span class="action-symbol page-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong data-i18n="capturePage">Capture full page</strong><small data-i18n="capturePageDesc">Save all content on the current page</small></span><span class="chevron" aria-hidden="true">›</span></button>
+        <section class="actions" aria-label="Capture options" data-i18n-aria-label="captureActions">
+          <button class="capture-action primary-action" id="selectElement" type="button"><span class="action-symbol frame-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong data-i18n="selectElement">Capture an element</strong><small data-i18n="selectElementDesc">Point to an element, then click to capture it</small></span><span class="chevron" aria-hidden="true">›</span></button>
+          <button class="capture-action secondary-action" id="captureVisible" type="button"><span class="action-symbol viewport-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong data-i18n="captureVisible">Capture visible area</strong><small data-i18n="captureVisibleDesc">Capture what’s visible in the current tab</small></span><span class="chevron" aria-hidden="true">›</span></button>
+          <button class="capture-action secondary-action" id="capturePage" type="button"><span class="action-symbol page-symbol" aria-hidden="true"><i></i></span><span class="action-copy"><strong data-i18n="capturePage">Capture full page</strong><small data-i18n="capturePageDesc">Capture the entire page</small></span><span class="chevron" aria-hidden="true">›</span></button>
         </section>
 
         <section class="output-settings" aria-labelledby="output-title">
-          <div class="section-heading"><h2 id="output-title" data-i18n="outputSettings">Output</h2><span id="pixelHint">Current 2×</span></div>
+          <div class="section-heading"><h2 id="output-title" data-i18n="outputSettings">Output</h2><span id="pixelHint">Scale: 2×</span></div>
           <div class="setting-row"><span data-i18n="imageFormat">Image format</span><div class="segment" role="radiogroup" aria-label="Image format" data-i18n-aria-label="imageFormat"><label><input type="radio" name="format" value="png" checked /><span>PNG</span></label><label><input type="radio" name="format" value="jpg" /><span>JPG</span></label><label><input type="radio" name="format" value="webp" /><span>WebP</span></label></div></div>
           <div class="setting-row"><span data-i18n="imageClarity">Resolution</span><div class="segment scale-segment" role="radiogroup" aria-label="Resolution" data-i18n-aria-label="imageClarity"><label><input type="radio" name="scale" value="1" /><span>1×</span></label><label><input type="radio" name="scale" value="2" checked /><span>2×</span></label><label><input type="radio" name="scale" value="3" /><span>3×</span></label></div></div>
-          <div class="setting-row" id="qualityRow" hidden><span data-i18n="lossyQuality">File quality</span><div class="segment quality-segment" role="radiogroup" aria-label="File quality" data-i18n-aria-label="lossyQuality"><label><input type="radio" name="quality" value="0.8" aria-label="Compact quality, 80%" data-i18n-aria-label="compactQualityLabel" /><span><strong data-i18n="compactQuality">Compact</strong><small>80%</small></span></label><label><input type="radio" name="quality" value="0.92" aria-label="Standard quality, 92%" data-i18n-aria-label="standardQualityLabel" checked /><span><strong data-i18n="standardQuality">Standard</strong><small>92%</small></span></label><label><input type="radio" name="quality" value="1" aria-label="Maximum quality, 100%" data-i18n-aria-label="maximumQualityLabel" /><span><strong data-i18n="maximumQuality">Max</strong><small>100%</small></span></label></div></div>
+          <div class="setting-row" id="qualityRow" hidden><span data-i18n="lossyQuality">Image quality</span><div class="segment quality-segment" role="radiogroup" aria-label="Image quality" data-i18n-aria-label="lossyQuality"><label><input type="radio" name="quality" value="0.8" aria-label="Compact, 80% quality" data-i18n-aria-label="compactQualityLabel" /><span><strong data-i18n="compactQuality">Compact</strong><small>80%</small></span></label><label><input type="radio" name="quality" value="0.92" aria-label="Standard, 92% quality" data-i18n-aria-label="standardQualityLabel" checked /><span><strong data-i18n="standardQuality">Standard</strong><small>92%</small></span></label><label><input type="radio" name="quality" value="1" aria-label="Maximum, 100% quality" data-i18n-aria-label="maximumQualityLabel" /><span><strong data-i18n="maximumQuality">Max</strong><small>100%</small></span></label></div></div>
         </section>
 
       </section>
 
+      <section class="panel history-panel" id="historyPanel" aria-labelledby="history-title" hidden>
+        <header class="settings-header history-header">
+          <div class="header-leading">
+            <button class="back-button" id="historyBackButton" type="button" aria-label="Back to capture" data-i18n-aria-label="backHome"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+            <h1 id="history-title" data-i18n="recentCaptures">Recent captures</h1>
+          </div>
+          <button class="clear-history" id="clearHistoryButton" type="button" data-i18n="clearAll" hidden>Clear all</button>
+        </header>
+        <div class="history-summary"><span id="historyStorageStatus" data-i18n="historySavingOff">New captures aren’t saved automatically · Existing captures stay here</span><strong id="historyCount">0</strong></div>
+        <div class="history-list" id="historyList" aria-live="polite"></div>
+        <div class="history-empty" id="historyEmpty">
+          <svg class="empty-captures" viewBox="0 0 92 76" aria-hidden="true">
+            <rect class="empty-rear-frame" x="10" y="9" width="57" height="43" rx="9" transform="rotate(-3 38 30)" />
+            <rect class="empty-front-frame" x="17" y="15" width="58" height="44" rx="9" />
+            <path class="empty-photo-mark" d="M27 48l11-10 8 7 8-8 11 11" />
+            <circle class="empty-photo-sun" cx="60" cy="27" r="3.3" />
+            <circle class="empty-history-badge" cx="69" cy="55" r="12" />
+            <path class="empty-history-mark" d="M63 52a7 7 0 1 1-.2 5.8M63 52v-4m0 4h4M69 51v4l2.7 1.5" />
+          </svg>
+          <strong data-i18n="noRecentCaptures">No recent captures</strong><small id="historyEmptyHint" data-i18n="historyEmptyHintOff">New captures won’t be saved here automatically. You can still save one from its preview.</small>
+        </div>
+        <section class="history-detail" id="historyDetail" aria-label="Capture preview" data-i18n-aria-label="historyPreview" hidden>
+          <header class="detail-header"><button class="back-button" id="detailBackButton" type="button" data-i18n-aria-label="backHistory" aria-label="Back to recent captures"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><strong id="detailTitle"></strong><button class="detail-delete" id="detailDeleteButton" type="button" data-i18n-aria-label="deleteCapture" aria-label="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9 7V4.8h6V7m-8 0 .7 12h8.6L17 7M10 10.5v5M14 10.5v5"/></svg></button></header>
+          <div class="detail-stage"><img id="detailImage" alt="" /></div>
+          <div class="detail-meta" id="detailMeta"></div>
+          <div class="detail-actions"><button id="detailCopyButton" type="button" data-capture-action="copy" data-i18n="copyImage">Copy image</button><button id="detailDownloadButton" type="button" data-capture-action="download" data-i18n="downloadImage">Download</button></div>
+          <span class="action-status" aria-live="polite" aria-atomic="true"></span>
+        </section>
+      </section>
+
       <section class="panel settings-panel" id="settingsPanel" aria-labelledby="settings-title" hidden>
         <header class="settings-header">
-          <button class="back-button" id="backButton" type="button" aria-label="Back to capture home" data-i18n-aria-label="backHome">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
-          </button>
-          <h1 id="settings-title" data-i18n="settings">Settings</h1>
+          <div class="header-leading">
+            <button class="back-button" id="backButton" type="button" aria-label="Back to capture" data-i18n-aria-label="backHome">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <h1 id="settings-title" data-i18n="settings">Settings</h1>
+          </div>
         </header>
 
         <div class="settings-content">
         <section class="settings-group general-settings" aria-labelledby="general-title">
           <div class="advanced-heading"><h2 id="general-title" data-i18n="generalSettings">General</h2></div>
           <div class="setting-row language-row"><span data-i18n="language">Language</span><div class="segment language-segment" role="radiogroup" aria-label="Language" data-i18n-aria-label="language"><label><input type="radio" name="language" value="auto" checked /><span data-i18n="followBrowser">Auto</span></label><label><input type="radio" name="language" value="zh-CN" /><span data-i18n="chinese">中文</span></label><label><input type="radio" name="language" value="en" /><span data-i18n="english">English</span></label></div></div>
+          <div class="setting-row"><span data-i18n="theme">Appearance</span><div class="segment theme-segment" role="radiogroup" aria-label="Appearance" data-i18n-aria-label="theme"><label><input type="radio" name="theme" value="auto" checked /><span data-i18n="themeAuto">Auto</span></label><label><input type="radio" name="theme" value="light" /><span data-i18n="lightTheme">Light</span></label><label><input type="radio" name="theme" value="dark" /><span data-i18n="darkTheme">Dark</span></label></div></div>
           <div class="setting-row"><span data-i18n="afterCapture">After capture</span><div class="segment after-capture-segment" role="radiogroup" aria-label="After capture" data-i18n-aria-label="afterCapture"><label><input type="radio" name="afterCapture" value="preview" checked /><span data-i18n="showPreview">Preview</span></label><label><input type="radio" name="afterCapture" value="copy" /><span data-i18n="autoCopy">Copy</span></label><label><input type="radio" name="afterCapture" value="download" /><span data-i18n="autoDownload">Download</span></label></div></div>
-          <div class="filename-setting"><div class="setting-row"><span data-i18n="filenameMode">File names</span><div class="segment filename-segment" role="radiogroup" aria-label="File names" data-i18n-aria-label="filenameMode"><label><input type="radio" name="filenameMode" value="smart" checked /><span data-i18n="smartFilename">Smart</span></label><label><input type="radio" name="filenameMode" value="page-title" /><span data-i18n="pageTitleFilename">Page title</span></label><label><input type="radio" name="filenameMode" value="timestamp" /><span data-i18n="timestampFilename">Timestamp</span></label></div></div><p class="setting-hint" id="filenameHint" data-i18n="smartFilenameDesc">Full pages use the page title; elements use their label.</p></div>
+          <div class="filename-setting"><div class="setting-row"><span data-i18n="filenameMode">File names</span><div class="segment filename-segment" role="radiogroup" aria-label="File names" data-i18n-aria-label="filenameMode"><label><input type="radio" name="filenameMode" value="smart" checked /><span data-i18n="smartFilename">Smart</span></label><label><input type="radio" name="filenameMode" value="page-title" /><span data-i18n="pageTitleFilename">Page title</span></label><label><input type="radio" name="filenameMode" value="timestamp" /><span data-i18n="timestampFilename">Timestamp</span></label></div></div><p class="setting-hint" id="filenameHint" data-i18n="smartFilenameDesc">Uses the page title for full pages and the element name for selections.</p></div>
+          <div class="history-preference-group">
+            <label class="toggle-row history-preference"><span><strong data-i18n="saveRecentCaptures">Automatically save captures to history</strong><small data-i18n="saveRecentCapturesDesc">Keep recent captures in this browser</small></span><input id="saveRecentCaptures" type="checkbox" /><i aria-hidden="true"></i></label>
+            <div class="history-preference-status" id="historyPreferenceStatus" data-state="disabled-empty">
+              <span id="historyPreferenceMessage" role="status" aria-live="polite" aria-atomic="true" data-i18n="historyPreferenceDisabledEmpty">No saved captures</span>
+              <button id="clearSavedCaptures" type="button" data-i18n="clearSavedCaptures" hidden>Clear</button>
+            </div>
+          </div>
         </section>
 
         <section class="settings-group advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
           <div class="advanced-heading"><h2 id="advanced-title" data-i18n="advancedSettings">Advanced</h2><span class="autosave-status"><b aria-hidden="true">✓</b> <span data-i18n="autosave">Auto-saved</span></span></div>
           <div class="advanced-options">
-            <label class="toggle-row"><span><strong data-i18n="embedFonts">Embed web fonts</strong><small data-i18n="embedFontsDesc">Improves custom font fidelity but takes longer</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
-            <label class="toggle-row"><span><strong data-i18n="reconcile">Precise layout calibration</strong><small data-i18n="reconcileDesc">More accurate layouts, about 2× slower</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
-            <label class="toggle-row"><span><strong data-i18n="outerShadows">Keep outer shadows</strong><small data-i18n="outerShadowsDesc">Includes shadows and outlines around the root element</small></span><input id="outerShadows" type="checkbox" /><i aria-hidden="true"></i></label>
-            <label class="toggle-row"><span><strong data-i18n="compressImages">Optimize embedded images</strong><small data-i18n="compressImagesDesc">Downsamples images to their displayed size</small></span><input id="compressImages" type="checkbox" checked /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="embedFonts">Embed web fonts</strong><small data-i18n="embedFontsDesc">Preserves custom fonts but takes longer</small></span><input id="embedFonts" type="checkbox" checked /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="reconcile">Improve layout accuracy</strong><small data-i18n="reconcileDesc">Reduces text wrapping and layout shifts, but takes about twice as long</small></span><input id="reconcile" type="checkbox" /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="outerShadows">Include outer shadows</strong><small data-i18n="outerShadowsDesc">Captures shadows and outlines outside the selected element</small></span><input id="outerShadows" type="checkbox" /><i aria-hidden="true"></i></label>
+            <label class="toggle-row"><span><strong data-i18n="compressImages">Optimize embedded images</strong><small data-i18n="compressImagesDesc">Resizes images to their displayed dimensions to reduce file size</small></span><input id="compressImages" type="checkbox" checked /><i aria-hidden="true"></i></label>
           </div>
-          <div class="setting-row advanced-choice-row"><span data-i18n="captureDelay">Capture delay</span><div class="segment delay-segment" role="radiogroup" aria-label="Capture delay" data-i18n-aria-label="captureDelay"><label><input type="radio" name="captureDelay" value="0" checked /><span data-i18n="noDelay">None</span></label><label><input type="radio" name="captureDelay" value="500" /><span data-i18n="halfSecond">0.5s</span></label><label><input type="radio" name="captureDelay" value="1000" /><span data-i18n="oneSecond">1s</span></label><label><input type="radio" name="captureDelay" value="2000" /><span data-i18n="twoSeconds">2s</span></label></div></div>
+          <div class="setting-row advanced-choice-row"><span data-i18n="captureDelay">Delay before capture</span><div class="segment delay-segment" role="radiogroup" aria-label="Delay before capture" data-i18n-aria-label="captureDelay"><label><input type="radio" name="captureDelay" value="0" checked aria-label="No delay" data-i18n-aria-label="noDelayLabel" /><span data-i18n="noDelay">0s</span></label><label><input type="radio" name="captureDelay" value="500" /><span data-i18n="halfSecond">0.5s</span></label><label><input type="radio" name="captureDelay" value="1000" /><span data-i18n="oneSecond">1s</span></label><label><input type="radio" name="captureDelay" value="2000" /><span data-i18n="twoSeconds">2s</span></label></div></div>
         </section>
         </div>
       </section>
 
       <footer class="popup-footer">
-        <p class="status" id="status" role="status"><span aria-hidden="true">●</span> <span class="status-copy" data-i18n="readyLocal">Ready · Images are processed locally</span></p>
+        <p class="status" id="status" role="status"><span aria-hidden="true">●</span> <span class="status-copy" data-i18n="readyLocal">Ready · Processing stays on this device</span></p>
         <div class="attribution">
           Powered by <a href="https://snapdom.dev" target="_blank" rel="noreferrer noopener">SnapDOM</a>
           <span aria-hidden="true">·</span>

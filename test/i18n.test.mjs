@@ -21,6 +21,17 @@ test('extension packages English and Chinese locales with English as the fallbac
   assert.match(chinese.extensionDescription.message, /[\u4e00-\u9fff]/);
 });
 
+test('both READMEs disclose optional image-source permissions', async () => {
+  const [english, chinese] = await Promise.all([
+    readFile(resolve(import.meta.dirname, '../README.md'), 'utf8'),
+    readFile(resolve(import.meta.dirname, '../README_CN.md'), 'utf8'),
+  ]);
+  assert.match(english, /optional.+image.+permission/is);
+  assert.match(english, /remain.+Chrome/is);
+  assert.match(chinese, /可选.+图片.+权限/s);
+  assert.match(chinese, /保留.+Chrome/s);
+});
+
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
