@@ -49,7 +49,7 @@
           </div>
           <button class="clear-history" id="clearHistoryButton" type="button" data-i18n="clearAll" hidden>Clear all</button>
         </header>
-        <div class="history-summary"><span id="historyStorageStatus" data-i18n="historySavingOff">New captures aren’t added automatically · Existing captures stay here</span><strong id="historyCount">0</strong></div>
+        <div class="history-summary"><span id="historyStorageStatus" data-i18n="historySavingOff">New captures aren’t saved automatically · Existing captures stay here</span><strong id="historyCount">0</strong></div>
         <div class="history-list" id="historyList" aria-live="polite"></div>
         <div class="history-empty" id="historyEmpty">
           <svg class="empty-captures" viewBox="0 0 92 76" aria-hidden="true">
@@ -60,7 +60,7 @@
             <circle class="empty-history-badge" cx="69" cy="55" r="12" />
             <path class="empty-history-mark" d="M63 52a7 7 0 1 1-.2 5.8M63 52v-4m0 4h4M69 51v4l2.7 1.5" />
           </svg>
-          <strong data-i18n="noRecentCaptures">No recent captures</strong><small id="historyEmptyHint" data-i18n="historyEmptyHintOff">New captures won’t appear here automatically. You can still add one from its preview.</small>
+          <strong data-i18n="noRecentCaptures">No recent captures</strong><small id="historyEmptyHint" data-i18n="historyEmptyHintOff">New captures won’t be saved here automatically. You can still save one from its preview.</small>
         </div>
         <section class="history-detail" id="historyDetail" aria-label="Capture preview" data-i18n-aria-label="historyPreview" hidden>
           <header class="detail-header"><button class="back-button" id="detailBackButton" type="button" data-i18n-aria-label="backHistory" aria-label="Back to recent captures"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><strong id="detailTitle"></strong><button class="detail-delete" id="detailDeleteButton" type="button" data-i18n-aria-label="deleteCapture" aria-label="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9 7V4.8h6V7m-8 0 .7 12h8.6L17 7M10 10.5v5M14 10.5v5"/></svg></button></header>
@@ -89,7 +89,7 @@
           <div class="setting-row"><span data-i18n="afterCapture">After capture</span><div class="segment after-capture-segment" role="radiogroup" aria-label="After capture" data-i18n-aria-label="afterCapture"><label><input type="radio" name="afterCapture" value="preview" checked /><span data-i18n="showPreview">Preview</span></label><label><input type="radio" name="afterCapture" value="copy" /><span data-i18n="autoCopy">Copy</span></label><label><input type="radio" name="afterCapture" value="download" /><span data-i18n="autoDownload">Download</span></label></div></div>
           <div class="filename-setting"><div class="setting-row"><span data-i18n="filenameMode">File names</span><div class="segment filename-segment" role="radiogroup" aria-label="File names" data-i18n-aria-label="filenameMode"><label><input type="radio" name="filenameMode" value="smart" checked /><span data-i18n="smartFilename">Smart</span></label><label><input type="radio" name="filenameMode" value="page-title" /><span data-i18n="pageTitleFilename">Page title</span></label><label><input type="radio" name="filenameMode" value="timestamp" /><span data-i18n="timestampFilename">Timestamp</span></label></div></div><p class="setting-hint" id="filenameHint" data-i18n="smartFilenameDesc">Uses the page title for full pages and the element name for selections.</p></div>
           <div class="history-preference-group">
-            <label class="toggle-row history-preference"><span><strong data-i18n="saveRecentCaptures">Add captures to history automatically</strong><small data-i18n="saveRecentCapturesDesc">Keep recent captures in this browser</small></span><input id="saveRecentCaptures" type="checkbox" /><i aria-hidden="true"></i></label>
+            <label class="toggle-row history-preference"><span><strong data-i18n="saveRecentCaptures">Automatically save captures to history</strong><small data-i18n="saveRecentCapturesDesc">Keep recent captures in this browser</small></span><input id="saveRecentCaptures" type="checkbox" /><i aria-hidden="true"></i></label>
             <div class="history-preference-status" id="historyPreferenceStatus" data-state="disabled-empty">
               <span id="historyPreferenceMessage" role="status" aria-live="polite" aria-atomic="true" data-i18n="historyPreferenceDisabledEmpty">No saved captures</span>
               <button id="clearSavedCaptures" type="button" data-i18n="clearSavedCaptures" hidden>Clear</button>

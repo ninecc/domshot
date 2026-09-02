@@ -418,7 +418,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     await page.evaluate(`document.querySelector('#saveRecentCaptures').click()`);
     await page.waitUntil(`globalThis.__syncStore.captureSettings?.saveRecentCaptures === true`, 'recent capture preference was not enabled');
     assert.equal(await page.evaluate(`document.querySelector('#historyPreferenceStatus').dataset.state`), 'enabled');
-    assert.equal(await page.evaluate(`document.querySelector('#historyPreferenceMessage').textContent`), '新截图将自动加入最近截图');
+    assert.equal(await page.evaluate(`document.querySelector('#historyPreferenceMessage').textContent`), '新截图将自动保存到历史');
     assert.equal(await page.evaluate(`document.querySelector('#clearSavedCaptures').hidden`), true, 'enabled history should not prompt for cleanup');
     await page.evaluate(`document.querySelector('#saveRecentCaptures').click()`);
     await page.waitUntil(`document.querySelector('#historyPreferenceStatus').dataset.state === 'disabled-with-captures'`, 'disabled history did not explain retained captures');
@@ -548,7 +548,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.ok(history.deleteTopOffset >= 8 && history.deleteTopOffset <= 10, 'history delete button must align to the card top inset');
     assert.ok(history.titleRightClearance >= 28, 'history titles must reserve space for the delete action');
     assert.equal(history.clearVisible, true);
-    assert.equal(history.savingStatus, '新截图不会自动加入此处 · 已有截图仍会保留');
+    assert.equal(history.savingStatus, '新截图不会自动保存到历史 · 已有截图仍会保留');
     assert.equal(history.focusedElement, 'historyBackButton');
     assert.equal(history.panelHeight, metrics.localeLayout.panelHeight);
     assert.equal(history.header.grouped, true, 'history header should keep one semantic navigation group');
@@ -698,7 +698,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     })()`);
     assert.ok(Math.abs(emptyState.horizontalOffset) < 0.5, 'empty history state must be horizontally centered');
     assert.ok(Math.abs(emptyState.verticalOffset) < 0.5, 'empty history state must be vertically centered in the content area');
-    assert.equal(emptyState.hint, '新截图不会自动加入此处，你仍可在预览中单独加入。');
+    assert.equal(emptyState.hint, '新截图不会自动保存到这里，你仍可在预览中单独保存。');
     assert.equal(emptyState.historyIconPathCount, 3, 'history entry should use the clock-and-arrow icon');
     assert.deepEqual(emptyState.illustration, {
       hiddenFromAssistiveTech: 'true', rearFrame: true, frontFrame: true,
