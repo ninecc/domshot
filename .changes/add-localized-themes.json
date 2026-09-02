@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "added",
-  "scope": "interface",
-  "summary": "Use DOMShot in English or Chinese with automatic, light, or dark appearance"
-}
