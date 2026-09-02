@@ -42,7 +42,7 @@ Open DOMShot on a regular web page, choose **Capture element**, **Capture visibl
 | Appearance | Auto | Follows the system theme or forces Light or Dark across popup, preview, selector, toast, and permission UI. |
 | After capture | Preview | Shows the preview, copies automatically, or downloads automatically after a successful capture. |
 | File names | Smart | Uses the page title for full pages and the element label for element captures; page-title and timestamp-only modes are also available. |
-| Automatically add to Recent Captures | Off | Keeps up to 10 captures in this browser for quick access. Individual captures can still be added from the preview; turning this off offers to keep or delete existing captures. |
+| Add captures to history automatically | Off | Keeps up to 10 captures in this browser for quick access. Individual captures can still be added from the preview; turning this off offers to keep or delete existing captures. |
 | Embed web fonts | On | Improves custom font fidelity, with additional processing time. |
 | Reconcile layout | Off | Improves text wrapping in inline and table-cell elements, but can roughly double capture time. |
 | Keep outer shadows | Off | Includes shadows and outlines around the captured root element. |

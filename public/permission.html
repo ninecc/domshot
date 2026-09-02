@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title data-i18n="permissionDocumentTitle">Allow image sources · DOMShot</title>
+    <title data-i18n="permissionDocumentTitle">Allow image access · DOMShot</title>
     <link rel="stylesheet" href="permission.css" />
   </head>
   <body>
@@ -14,12 +14,12 @@
       </header>
       <section class="permission-copy" aria-labelledby="permission-title">
         <span class="permission-mark" aria-hidden="true">↗</span>
-        <p class="eyebrow" data-i18n="permissionEyebrow">Only for sources needed by this capture</p>
-        <h1 id="permission-title" data-i18n="permissionHeading">Allow cross-origin images</h1>
-        <p data-i18n="permissionIntro">The browser blocked the image sources below. Once allowed, DOMShot will read them locally and retry the capture.</p>
+        <p class="eyebrow" data-i18n="permissionEyebrow">For images used in this capture</p>
+        <h1 id="permission-title" data-i18n="permissionHeading">Allow image access</h1>
+        <p data-i18n="permissionIntro">DOMShot needs access to the sites below to load images for this capture. Access remains available for future captures until you remove it in Chrome.</p>
       </section>
       <section class="origin-panel" aria-labelledby="origin-title">
-        <div class="origin-heading"><h2 id="origin-title" data-i18n="pendingOrigins">Sources awaiting permission</h2><span id="originCount">0 sources</span></div>
+        <div class="origin-heading"><h2 id="origin-title" data-i18n="pendingOrigins">Sites that need access</h2><span id="originCount">0 sites</span></div>
         <ul id="originList"></ul>
       </section>
       <div class="privacy-note"><strong data-i18n="privacyTitle">Your captures stay on this device</strong><span data-i18n="privacyBody">DOMShot does not upload captures. Image requests are made without cookies. When Recent Captures is enabled, up to 10 captures are stored in this browser.</span></div>
