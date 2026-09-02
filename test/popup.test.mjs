@@ -235,6 +235,11 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         outerShadowsChecked: document.querySelector('#outerShadows').checked,
         compressImagesChecked: document.querySelector('#compressImages').checked,
         saveRecentCapturesChecked: document.querySelector('#saveRecentCaptures').checked,
+        historyPreferenceCopy: {
+          grouped: Boolean(document.querySelector('.history-preference-group .history-preference-status')),
+          message: document.querySelector('#historyPreferenceMessage').textContent,
+          clear: document.querySelector('#clearSavedCaptures').textContent
+        },
         focusedElement: document.activeElement.id
       })));
     })`);
@@ -278,6 +283,11 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.outerShadowsChecked, false);
     assert.equal(metrics.compressImagesChecked, true);
     assert.equal(metrics.saveRecentCapturesChecked, false);
+    assert.deepEqual(metrics.historyPreferenceCopy, {
+      grouped: true,
+      message: '1 saved capture remains',
+      clear: 'Clear'
+    });
     assert.equal(metrics.focusedElement, 'backButton');
     assert.ok(metrics.scrollWidth <= 360, `expanded popup is ${metrics.scrollWidth}px wide`);
     assert.ok(metrics.scrollHeight <= 600, `expanded popup is ${metrics.scrollHeight}px tall and requires a scrollbar`);
@@ -408,6 +418,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     await page.evaluate(`document.querySelector('#saveRecentCaptures').click()`);
     await page.waitUntil(`globalThis.__syncStore.captureSettings?.saveRecentCaptures === true`, 'recent capture preference was not enabled');
     assert.equal(await page.evaluate(`document.querySelector('#historyPreferenceStatus').dataset.state`), 'enabled');
+    assert.equal(await page.evaluate(`document.querySelector('#historyPreferenceMessage').textContent`), '新截图将自动加入最近截图');
     assert.equal(await page.evaluate(`document.querySelector('#clearSavedCaptures').hidden`), true, 'enabled history should not prompt for cleanup');
     await page.evaluate(`document.querySelector('#saveRecentCaptures').click()`);
     await page.waitUntil(`document.querySelector('#historyPreferenceStatus').dataset.state === 'disabled-with-captures'`, 'disabled history did not explain retained captures');
@@ -424,8 +435,8 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(historyPreference.disabled, false);
     assert.equal(historyPreference.existingCaptures, capturesBeforePreferenceChange, 'turning off recent captures must preserve existing items by default');
     assert.equal(historyPreference.dialogExists, false, 'a reversible preference change should not open a modal');
-    assert.match(historyPreference.message, new RegExp(String(capturesBeforePreferenceChange)));
-    assert.equal(historyPreference.clearLabel, '清空已有截图');
+    assert.equal(historyPreference.message, `已有 ${capturesBeforePreferenceChange} 张截图仍保留`);
+    assert.equal(historyPreference.clearLabel, '清空');
     assert.equal(historyPreference.clearHidden, false);
     const deleteChoiceIdle = await buttonMetrics(page, '#clearSavedCaptures');
     await page.hover('#clearSavedCaptures');
@@ -437,7 +448,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(await page.evaluate(`document.querySelector('#clearSavedCaptures').textContent`), '确认清空');
     assert.match(await page.evaluate(`document.querySelector('#status').textContent`), /再次点击/);
     await page.evaluate(`document.querySelector('#general-title').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))`);
-    assert.equal(await page.evaluate(`document.querySelector('#clearSavedCaptures').textContent`), '清空已有截图');
+    assert.equal(await page.evaluate(`document.querySelector('#clearSavedCaptures').textContent`), '清空');
     assert.equal(await page.evaluate(`globalThis.__historyStore.length`), capturesBeforePreferenceChange);
     const savedAdvancedSettings = await page.evaluate(`(() => {
       document.querySelector('#outerShadows').click();

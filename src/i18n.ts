@@ -63,9 +63,9 @@ const en = {
   savedToRecent: 'Saved to capture history', dontSaveThisCapture: 'Remove from history', historyNotSaved: 'Not saved to capture history',
   notKeptInRecent: 'Removed from history · Copy and download are still available', restoreHistorySave: 'Save to history again', saveToRecent: 'Save to history',
   historySavingEnabled: 'New captures will be added to history', historySavingDisabled: 'New captures won’t be added to history · Existing captures stay here',
-  historyPreferenceEnabled: 'New captures are added automatically', historyPreferenceDisabledEmpty: 'Off · No saved captures',
-  historyPreferenceDisabledOne: 'Off · 1 saved capture remains', historyPreferenceDisabledMany: 'Off · {count} saved captures remain',
-  clearSavedCaptures: 'Clear saved', confirmClearSavedPrompt: 'Click again to clear all saved captures',
+  historyPreferenceEnabled: 'New captures will be added to Recent Captures', historyPreferenceDisabledEmpty: 'No saved captures',
+  historyPreferenceDisabledOne: '1 saved capture remains', historyPreferenceDisabledMany: '{count} saved captures remain',
+  clearSavedCaptures: 'Clear', confirmClearSavedPrompt: 'Click again to clear all saved captures',
 } as const;
 
 type MessageKey = keyof typeof en;
@@ -120,9 +120,9 @@ const zh: Record<MessageKey, string> = {
   savedToRecent: '已保存到截图历史', dontSaveThisCapture: '从截图历史中移除', historyNotSaved: '未保存到截图历史',
   notKeptInRecent: '已从截图历史中移除 · 仍可复制或下载', restoreHistorySave: '重新保存到历史', saveToRecent: '保存到截图历史',
   historySavingEnabled: '新截图将自动加入最近截图', historySavingDisabled: '新截图不会再加入最近截图 · 已有截图保持不变',
-  historyPreferenceEnabled: '新截图将自动加入最近截图', historyPreferenceDisabledEmpty: '已关闭 · 没有已保存截图',
-  historyPreferenceDisabledOne: '已关闭 · 仍保留 1 张截图', historyPreferenceDisabledMany: '已关闭 · 仍保留 {count} 张截图',
-  clearSavedCaptures: '清空已有截图', confirmClearSavedPrompt: '再次点击将清空全部已有截图',
+  historyPreferenceEnabled: '新截图将自动加入最近截图', historyPreferenceDisabledEmpty: '没有已保存截图',
+  historyPreferenceDisabledOne: '已有 1 张截图仍保留', historyPreferenceDisabledMany: '已有 {count} 张截图仍保留',
+  clearSavedCaptures: '清空', confirmClearSavedPrompt: '再次点击将清空全部已有截图',
 };
 
 const messages: Record<UiLocale, Record<MessageKey, string>> = { en, 'zh-CN': zh };

@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "changed",
+  "scope": "settings",
+  "summary": "Group recent-capture retention status and cleanup with its automatic-save preference"
+}
