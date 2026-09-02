@@ -53,6 +53,8 @@ Settings are saved automatically.
 
 ## Privacy and permissions
 
+See the [DOMShot Privacy Policy](./PRIVACY.md) for details about local processing, optional Recent Captures, Chrome Sync, and image-source access.
+
 DOMShot does not request persistent access to every website and contains no telemetry or image-upload service. Recent capture saving is off by default. When enabled, history keeps up to 10 captures, 64 MB per capture and 256 MB overall; older captures are removed when either limit is reached. Captures are removed when the extension is uninstalled and can be cleared at any time.
 
 - `activeTab`: access the current tab after a user action.
