@@ -35,7 +35,7 @@ test('a real capture is persisted by the extension service worker', async () => 
 
     await page.evaluate(`globalThis.__contentMessageListener({
       type: 'DOMSHOT_VISIBLE_AREA', pageZoom: 1, locale: 'en', theme: 'light',
-      settings: { format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'timestamp', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true }
+      settings: { format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'timestamp', saveRecentCaptures: true, captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true }
     }, {}, () => {})`);
 
     await page.waitForFunction(async () => (await chrome.runtime.sendMessage({ type: 'DOMSHOT_HISTORY_LIST' }))?.captures?.length === 1, { polling: 100, timeout: 5000 });

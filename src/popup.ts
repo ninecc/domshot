@@ -13,6 +13,7 @@ const status = document.querySelector<HTMLElement>('#status')!;
 const pixelHint = document.querySelector<HTMLElement>('#pixelHint')!;
 const qualityRow = document.querySelector<HTMLElement>('#qualityRow')!;
 const filenameHint = document.querySelector<HTMLElement>('#filenameHint')!;
+const saveRecentCaptures = document.querySelector<HTMLInputElement>('#saveRecentCaptures')!;
 const selectButton = document.querySelector<HTMLButtonElement>('#selectElement')!;
 const visibleButton = document.querySelector<HTMLButtonElement>('#captureVisible')!;
 const pageButton = document.querySelector<HTMLButtonElement>('#capturePage')!;
@@ -30,6 +31,8 @@ const settingsPanel = document.querySelector<HTMLElement>('#settingsPanel')!;
 const historyPanel = document.querySelector<HTMLElement>('#historyPanel')!;
 const historyList = document.querySelector<HTMLElement>('#historyList')!;
 const historyEmpty = document.querySelector<HTMLElement>('#historyEmpty')!;
+const historyEmptyHint = document.querySelector<HTMLElement>('#historyEmptyHint')!;
+const historyStorageStatus = document.querySelector<HTMLElement>('#historyStorageStatus')!;
 const historyCount = document.querySelector<HTMLElement>('#historyCount')!;
 const clearHistoryButton = document.querySelector<HTMLButtonElement>('#clearHistoryButton')!;
 const historyDetail = document.querySelector<HTMLElement>('#historyDetail')!;
@@ -38,6 +41,9 @@ const detailImage = document.querySelector<HTMLImageElement>('#detailImage')!;
 const detailTitle = document.querySelector<HTMLElement>('#detailTitle')!;
 const detailMeta = document.querySelector<HTMLElement>('#detailMeta')!;
 const detailDeleteButton = document.querySelector<HTMLButtonElement>('#detailDeleteButton')!;
+const historyDisableDialog = document.querySelector<HTMLDialogElement>('#historyDisableDialog')!;
+const keepExistingCaptures = document.querySelector<HTMLButtonElement>('#keepExistingCaptures')!;
+const deleteSavedCaptures = document.querySelector<HTMLButtonElement>('#deleteSavedCaptures')!;
 let activeLocale: UiLocale = resolveLocale('auto');
 let activeTheme: UiTheme = resolveTheme('auto');
 let captures: CaptureHistoryItem[] = [];
@@ -57,6 +63,7 @@ function readSettings(): CaptureSettings {
     quality: Number(chosen('quality')) as CaptureSettings['quality'],
     afterCapture: chosen<CaptureSettings['afterCapture']>('afterCapture'),
     filenameMode: chosen<CaptureSettings['filenameMode']>('filenameMode'),
+    saveRecentCaptures: saveRecentCaptures.checked,
     captureDelay: Number(chosen('captureDelay')) as CaptureSettings['captureDelay'],
     embedFonts: embedFonts.checked,
     reconcile: reconcile.checked,
@@ -86,6 +93,7 @@ function applySettings(settings: CaptureSettings) {
   if (afterCapture) afterCapture.checked = true;
   if (filenameMode) filenameMode.checked = true;
   if (captureDelay) captureDelay.checked = true;
+  saveRecentCaptures.checked = settings.saveRecentCaptures;
   embedFonts.checked = settings.embedFonts;
   reconcile.checked = settings.reconcile;
   outerShadows.checked = settings.outerShadows;
@@ -93,6 +101,7 @@ function applySettings(settings: CaptureSettings) {
   pixelHint.textContent = t(activeLocale, 'currentScale', { scale: settings.scale });
   updateFormatDependentSettings(settings.format);
   updateFilenameHint(settings.filenameMode);
+  updateHistoryPreferenceCopy();
 }
 
 function updateFormatDependentSettings(format: CaptureSettings['format']) {
@@ -104,6 +113,17 @@ function updateFilenameHint(mode: CaptureSettings['filenameMode']) {
   filenameHint.textContent = t(activeLocale, key);
 }
 
+function updateHistoryPreferenceCopy() {
+  historyStorageStatus.textContent = t(activeLocale, saveRecentCaptures.checked ? 'historyLocal' : 'historySavingOff');
+  historyEmptyHint.textContent = t(activeLocale, saveRecentCaptures.checked ? 'historyEmptyHint' : 'historyEmptyHintOff');
+}
+
+function showHistoryDisableDialog() {
+  if (historyDisableDialog.open) return;
+  historyDisableDialog.showModal();
+  requestAnimationFrame(() => keepExistingCaptures.focus());
+}
+
 function applyLanguagePreference(preference: LanguagePreference) {
   const input = document.querySelector<HTMLInputElement>(`input[name="language"][value="${preference}"]`);
   if (input) input.checked = true;
@@ -111,6 +131,7 @@ function applyLanguagePreference(preference: LanguagePreference) {
   localizeDocument(activeLocale);
   pixelHint.textContent = t(activeLocale, 'currentScale', { scale: readSettings().scale });
   updateFilenameHint(readSettings().filenameMode);
+  updateHistoryPreferenceCopy();
 }
 
 function applyThemePreference(preference: ThemePreference) {
@@ -306,7 +327,17 @@ document.querySelectorAll<HTMLInputElement>('input:not([name="language"]):not([n
     pixelHint.textContent = t(activeLocale, 'currentScale', { scale: settings.scale });
     updateFormatDependentSettings(settings.format);
     updateFilenameHint(settings.filenameMode);
+    updateHistoryPreferenceCopy();
     await chrome.storage.sync.set({ captureSettings: settings });
+    if (input === saveRecentCaptures) {
+      status.textContent = t(activeLocale, settings.saveRecentCaptures ? 'historySavingEnabled' : 'historySavingDisabled');
+      if (settings.saveRecentCaptures) {
+        if (historyDisableDialog.open) historyDisableDialog.close();
+      } else {
+        await loadHistory(false);
+        if (captures.length > 0) showHistoryDisableDialog();
+      }
+    }
   });
 });
 
@@ -371,6 +402,32 @@ clearHistoryButton.addEventListener('click', () => {
   void clearCaptureHistory().then(() => {
     captures = []; closeHistoryDetail(); renderHistory(); status.textContent = t(activeLocale, 'historyCleared');
   }, () => { status.textContent = t(activeLocale, 'historyActionFailed'); });
+});
+keepExistingCaptures.addEventListener('click', () => {
+  historyDisableDialog.close();
+  status.textContent = t(activeLocale, 'historySavingDisabled');
+});
+deleteSavedCaptures.addEventListener('click', async () => {
+  keepExistingCaptures.disabled = true;
+  deleteSavedCaptures.disabled = true;
+  try {
+    await ensureBackgroundReady();
+    await clearCaptureHistory();
+    captures = [];
+    closeHistoryDetail();
+    renderHistory();
+    historyDisableDialog.close();
+    status.textContent = t(activeLocale, 'historyCleared');
+  } catch {
+    historyDisableDialog.close();
+    status.textContent = t(activeLocale, 'historyActionFailed');
+  } finally {
+    keepExistingCaptures.disabled = false;
+    deleteSavedCaptures.disabled = false;
+  }
+});
+historyDisableDialog.addEventListener('cancel', () => {
+  status.textContent = t(activeLocale, 'historySavingDisabled');
 });
 backButton.addEventListener('click', () => {
   settingsPanel.hidden = true;

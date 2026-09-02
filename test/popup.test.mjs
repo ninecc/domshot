@@ -211,6 +211,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         reconcileChecked: document.querySelector('#reconcile').checked,
         outerShadowsChecked: document.querySelector('#outerShadows').checked,
         compressImagesChecked: document.querySelector('#compressImages').checked,
+        saveRecentCapturesChecked: document.querySelector('#saveRecentCaptures').checked,
         focusedElement: document.activeElement.id
       })));
     })`);
@@ -249,6 +250,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.equal(metrics.reconcileChecked, false);
     assert.equal(metrics.outerShadowsChecked, false);
     assert.equal(metrics.compressImagesChecked, true);
+    assert.equal(metrics.saveRecentCapturesChecked, false);
     assert.equal(metrics.focusedElement, 'backButton');
     assert.ok(metrics.scrollWidth <= 360, `expanded popup is ${metrics.scrollWidth}px wide`);
     assert.ok(metrics.scrollHeight <= 600, `expanded popup is ${metrics.scrollHeight}px tall and requires a scrollbar`);
@@ -360,6 +362,36 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       return globalThis.__syncStore.captureSettings?.afterCapture;
     })()`);
     assert.equal(savedPostAction, 'copy');
+    const capturesBeforePreferenceChange = await page.evaluate(`globalThis.__historyStore.length`);
+    await page.evaluate(`document.querySelector('#saveRecentCaptures').click()`);
+    await page.waitUntil(`globalThis.__syncStore.captureSettings?.saveRecentCaptures === true`, 'recent capture preference was not enabled');
+    await page.evaluate(`document.querySelector('#saveRecentCaptures').click()`);
+    await page.waitUntil(`document.querySelector('#historyDisableDialog').open`, 'existing captures did not trigger the delete choice');
+    const historyPreference = await page.evaluate(`({
+      enabled: true,
+      disabled: globalThis.__syncStore.captureSettings?.saveRecentCaptures,
+      existingCaptures: globalThis.__historyStore.length,
+      dialogTitle: document.querySelector('#history-disable-title').textContent,
+      dialogBody: document.querySelector('#history-disable-body').textContent,
+      actions: [...document.querySelectorAll('.history-disable-actions button')].map((button) => button.textContent)
+    })`);
+    assert.equal(historyPreference.enabled, true);
+    assert.equal(historyPreference.disabled, false);
+    assert.equal(historyPreference.existingCaptures, capturesBeforePreferenceChange, 'turning off recent captures must not delete existing items before the user chooses');
+    assert.equal(historyPreference.dialogTitle, '停止自动加入新截图？');
+    assert.match(historyPreference.dialogBody, /是否同时删除/);
+    assert.deepEqual(historyPreference.actions, ['保留已有截图', '删除已有截图']);
+    const deleteChoiceIdle = await buttonMetrics(page, '#deleteSavedCaptures');
+    await page.hover('#deleteSavedCaptures');
+    await page.waitUntil(`getComputedStyle(document.querySelector('#deleteSavedCaptures')).backgroundColor !== ${JSON.stringify(deleteChoiceIdle.backgroundColor)}`, 'delete history choice did not react on hover');
+    const deleteChoiceHovered = await buttonMetrics(page, '#deleteSavedCaptures');
+    assert.notEqual(deleteChoiceHovered.backgroundColor, deleteChoiceIdle.backgroundColor);
+    assert.notEqual(deleteChoiceHovered.color, deleteChoiceIdle.color);
+    assert.deepEqual(deleteChoiceHovered.rect, deleteChoiceIdle.rect, 'delete history choice must not move on hover');
+    await page.evaluate(`document.querySelector('#keepExistingCaptures').click()`);
+    await page.waitUntil(`!document.querySelector('#historyDisableDialog').open`, 'history choice did not close');
+    assert.equal(await page.evaluate(`globalThis.__historyStore.length`), capturesBeforePreferenceChange);
+    assert.match(await page.evaluate(`document.querySelector('#status').textContent`), /已有截图保持不变/);
     const savedAdvancedSettings = await page.evaluate(`(() => {
       document.querySelector('#outerShadows').click();
       document.querySelector('#compressImages').click();
@@ -429,6 +461,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
         return parseFloat(getComputedStyle(title).paddingRight);
       })(),
       clearVisible: !document.querySelector('#clearHistoryButton').hidden,
+      savingStatus: document.querySelector('#historyStorageStatus').textContent,
       focusedElement: document.activeElement.id,
       panelHeight: document.querySelector('#historyPanel').getBoundingClientRect().height,
       scrollWidth: document.documentElement.scrollWidth,
@@ -448,6 +481,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.ok(history.deleteTopOffset >= 8 && history.deleteTopOffset <= 10, 'history delete button must align to the card top inset');
     assert.ok(history.titleRightClearance >= 28, 'history titles must reserve space for the delete action');
     assert.equal(history.clearVisible, true);
+    assert.equal(history.savingStatus, '新截图不会自动加入此处 · 已有截图仍会保留');
     assert.equal(history.focusedElement, 'historyBackButton');
     assert.equal(history.panelHeight, metrics.localeLayout.panelHeight);
     assert.ok(history.scrollWidth <= 360);
@@ -548,7 +582,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     })()`);
     assert.ok(Math.abs(emptyState.horizontalOffset) < 0.5, 'empty history state must be horizontally centered');
     assert.ok(Math.abs(emptyState.verticalOffset) < 0.5, 'empty history state must be vertically centered in the content area');
-    assert.equal(emptyState.hint, '截图会自动保存在这里，方便再次复制或下载。');
+    assert.equal(emptyState.hint, '新截图不会自动加入此处，你仍可在预览中单独加入。');
     assert.equal(emptyState.historyIconPathCount, 3, 'history entry should use the clock-and-arrow icon');
   });
 });

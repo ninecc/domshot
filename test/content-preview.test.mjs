@@ -71,9 +71,16 @@ test('content preview remains stable across script updates and zoom changes', as
       await page.evaluate('scrollTo(0, 0)');
     });
 
-    await context.test('streams captures to history without one oversized message', async () => {
+    await context.test('does not save captures to history by default', async () => {
       await page.evaluate(`globalThis.__domshotHistoryMessages = []`);
       await requestVisibleArea(page);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Capture preview did not appear');
+      assert.deepEqual(await page.evaluate(`globalThis.__domshotHistoryMessages`), []);
+    });
+
+    await context.test('streams captures to history without one oversized message when enabled', async () => {
+      await page.evaluate(`globalThis.__domshotHistoryMessages = []`);
+      await requestVisibleArea(page, { saveRecentCaptures: true });
       await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_COMMIT')`, 'Capture history upload did not complete');
       const historyMessages = await page.evaluate(`globalThis.__domshotHistoryMessages`);
       assert.equal(historyMessages[0].type, 'DOMSHOT_HISTORY_BEGIN');
@@ -84,13 +91,14 @@ test('content preview remains stable across script updates and zoom changes', as
     });
 
     await context.test('lets the current preview remove and restore its history entry', async () => {
-      await capturePage(page, 1, 'zh-CN');
+      await requestFullPage(page, { saveRecentCaptures: true }, 'zh-CN');
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Preview did not appear');
       const initial = await page.evaluate(`(() => {
         const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
         return { status: shadow.querySelector('.history-retention-status').textContent, action: shadow.querySelector('.history-retention-toggle').textContent };
       })()`);
-      assert.equal(initial.status, '✓ 已保存到最近截图');
-      assert.equal(initial.action, '不保存到最近截图');
+      assert.equal(initial.status, '✓ 已保存到截图历史');
+      assert.equal(initial.action, '从截图历史中移除');
 
       await page.evaluate(`globalThis.__domshotHistoryMessages = []; document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-toggle').click()`);
       await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_DELETE')`, 'Current capture was not removed from history');
@@ -98,12 +106,16 @@ test('content preview remains stable across script updates and zoom changes', as
         const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
         return { status: shadow.querySelector('.history-retention-status').textContent, action: shadow.querySelector('.history-retention-toggle').textContent };
       })()`);
-      assert.equal(removed.status, '本次截图不会保留');
-      assert.equal(removed.action, '恢复保存');
+      assert.equal(removed.status, '已从截图历史中移除 · 仍可复制或下载');
+      assert.equal(removed.action, '重新保存到历史');
+      assert.equal(await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        return !shadow.querySelector('.copy').disabled && !shadow.querySelector('.download').disabled;
+      })()`), true, 'removing a capture from history must not disable copy or download');
 
       await page.evaluate(`globalThis.__domshotHistoryMessages = []; document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-toggle').click()`);
       await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_COMMIT')`, 'Current capture was not restored to history');
-      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-status').textContent`), '✓ 已保存到最近截图');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-status').textContent`), '✓ 已保存到截图历史');
     });
 
     await context.test('runs the configured post-capture action with safe preview fallback', async () => {
@@ -120,10 +132,10 @@ test('content preview remains stable across script updates and zoom changes', as
       await requestFullPage(page, { afterCapture: 'copy', outerShadows: true, compress: false });
       await page.waitUntil(`globalThis.__domshotCopiedItems?.length === 1`, 'Automatic copy did not write the image');
       assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi`), 'toast');
-      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('button').textContent`), '不保存到最近截图');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('button').textContent`), '保存到截图历史');
       await page.evaluate(`globalThis.__domshotHistoryMessages = []; document.querySelector('#domshot-extension-root').shadowRoot.querySelector('button').click()`);
-      await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_DELETE')`, 'Automatic-copy toast did not remove the capture from history');
-      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('strong').textContent`), '本次截图不会保留');
+      await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_COMMIT')`, 'Automatic-copy toast did not save the capture on demand');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('strong').textContent`), '已保存到截图历史');
 
       await page.evaluate(`document.title = 'Résumé 日本語'; HTMLAnchorElement.prototype.click = function () { globalThis.__domshotDownload = this.download; }`);
       await requestFullPage(page, { afterCapture: 'download', filenameMode: 'page-title' });
@@ -441,7 +453,7 @@ async function requestFullPage(page, overrides = {}, locale = 'zh-CN', theme = '
   const { pageZoom = 1, ...settings } = overrides;
   await page.evaluate(`globalThis.__domshotListener({
     type: 'DOMSHOT_FULL_PAGE',
-    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
+    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', saveRecentCaptures: false, captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...settings })},
     locale: ${JSON.stringify(locale)},
     theme: ${JSON.stringify(theme)},
     pageZoom: ${pageZoom}
@@ -451,7 +463,7 @@ async function requestFullPage(page, overrides = {}, locale = 'zh-CN', theme = '
 async function requestVisibleArea(page, overrides = {}, locale = 'zh-CN', theme = 'light') {
   await page.evaluate(`globalThis.__domshotListener({
     type: 'DOMSHOT_VISIBLE_AREA',
-    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...overrides })},
+    settings: ${JSON.stringify({ format: 'png', scale: 1, quality: 0.92, afterCapture: 'preview', filenameMode: 'smart', saveRecentCaptures: false, captureDelay: 0, embedFonts: false, reconcile: false, outerShadows: false, compress: true, ...overrides })},
     locale: ${JSON.stringify(locale)},
     theme: ${JSON.stringify(theme)},
     pageZoom: 1

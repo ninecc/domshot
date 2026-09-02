@@ -32,6 +32,7 @@ export interface CaptureSettings {
   quality: ImageQuality;
   afterCapture: PostCaptureAction;
   filenameMode: FilenameMode;
+  saveRecentCaptures: boolean;
   captureDelay: CaptureDelay;
   embedFonts: boolean;
   reconcile: boolean;
@@ -77,6 +78,7 @@ export const DEFAULT_SETTINGS: CaptureSettings = {
   quality: 0.92,
   afterCapture: 'preview',
   filenameMode: 'smart',
+  saveRecentCaptures: false,
   captureDelay: 0,
   embedFonts: true,
   reconcile: false,

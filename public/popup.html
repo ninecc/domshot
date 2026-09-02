@@ -47,9 +47,9 @@
           <h1 id="history-title" data-i18n="recentCaptures">Recent captures</h1>
           <button class="clear-history" id="clearHistoryButton" type="button" data-i18n="clearAll" hidden>Clear all</button>
         </header>
-        <div class="history-summary"><span data-i18n="historyLocal">Stored only in this browser</span><strong id="historyCount">0 / 10</strong></div>
+        <div class="history-summary"><span id="historyStorageStatus" data-i18n="historyLocal">Stored only in this browser</span><strong id="historyCount">0 / 10</strong></div>
         <div class="history-list" id="historyList" aria-live="polite"></div>
-        <div class="history-empty" id="historyEmpty"><span class="empty-frame" aria-hidden="true"><i></i></span><strong data-i18n="noRecentCaptures">No recent captures</strong><small data-i18n="historyEmptyHint">Captures are saved here automatically, ready to copy or download again.</small></div>
+        <div class="history-empty" id="historyEmpty"><span class="empty-frame" aria-hidden="true"><i></i></span><strong data-i18n="noRecentCaptures">No recent captures</strong><small id="historyEmptyHint" data-i18n="historyEmptyHint">Captures you save appear here, ready to copy or download again.</small></div>
         <section class="history-detail" id="historyDetail" aria-label="Capture preview" data-i18n-aria-label="historyPreview" hidden>
           <header class="detail-header"><button class="back-button" id="detailBackButton" type="button" data-i18n-aria-label="backHistory" aria-label="Back to recent captures"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><strong id="detailTitle"></strong><button class="detail-delete" id="detailDeleteButton" type="button" data-i18n-aria-label="deleteCapture" aria-label="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M9 7V4.8h6V7m-8 0 .7 12h8.6L17 7M10 10.5v5M14 10.5v5"/></svg></button></header>
           <div class="detail-stage"><img id="detailImage" alt="" /></div>
@@ -74,6 +74,7 @@
           <div class="setting-row"><span data-i18n="theme">Appearance</span><div class="segment theme-segment" role="radiogroup" aria-label="Appearance" data-i18n-aria-label="theme"><label><input type="radio" name="theme" value="auto" checked /><span data-i18n="themeAuto">Auto</span></label><label><input type="radio" name="theme" value="light" /><span data-i18n="lightTheme">Light</span></label><label><input type="radio" name="theme" value="dark" /><span data-i18n="darkTheme">Dark</span></label></div></div>
           <div class="setting-row"><span data-i18n="afterCapture">After capture</span><div class="segment after-capture-segment" role="radiogroup" aria-label="After capture" data-i18n-aria-label="afterCapture"><label><input type="radio" name="afterCapture" value="preview" checked /><span data-i18n="showPreview">Preview</span></label><label><input type="radio" name="afterCapture" value="copy" /><span data-i18n="autoCopy">Copy</span></label><label><input type="radio" name="afterCapture" value="download" /><span data-i18n="autoDownload">Download</span></label></div></div>
           <div class="filename-setting"><div class="setting-row"><span data-i18n="filenameMode">File names</span><div class="segment filename-segment" role="radiogroup" aria-label="File names" data-i18n-aria-label="filenameMode"><label><input type="radio" name="filenameMode" value="smart" checked /><span data-i18n="smartFilename">Smart</span></label><label><input type="radio" name="filenameMode" value="page-title" /><span data-i18n="pageTitleFilename">Page title</span></label><label><input type="radio" name="filenameMode" value="timestamp" /><span data-i18n="timestampFilename">Timestamp</span></label></div></div><p class="setting-hint" id="filenameHint" data-i18n="smartFilenameDesc">Full pages use the page title; elements use their label.</p></div>
+          <label class="toggle-row history-preference"><span><strong data-i18n="saveRecentCaptures">Automatically add to Recent Captures</strong><small data-i18n="saveRecentCapturesDesc">Keep up to 10 captures in this browser for quick access</small></span><input id="saveRecentCaptures" type="checkbox" /><i aria-hidden="true"></i></label>
         </section>
 
         <section class="settings-group advanced-settings" id="advancedSettings" aria-labelledby="advanced-title">
@@ -88,6 +89,17 @@
         </section>
         </div>
       </section>
+
+      <dialog class="history-disable-dialog" id="historyDisableDialog" aria-labelledby="history-disable-title" aria-describedby="history-disable-body">
+        <div class="history-disable-copy">
+          <h2 id="history-disable-title" data-i18n="historyDisableTitle">Stop adding new captures?</h2>
+          <p id="history-disable-body" data-i18n="historyDisableBody">Previously saved captures are still in this browser. Would you like to delete them?</p>
+        </div>
+        <div class="history-disable-actions">
+          <button id="keepExistingCaptures" type="button" data-i18n="keepExistingCaptures">Keep existing</button>
+          <button class="danger" id="deleteSavedCaptures" type="button" data-i18n="deleteSavedCaptures">Delete saved captures</button>
+        </div>
+      </dialog>
 
       <footer class="popup-footer">
         <p class="status" id="status" role="status"><span aria-hidden="true">●</span> <span class="status-copy" data-i18n="readyLocal">Ready · Images are processed locally</span></p>
