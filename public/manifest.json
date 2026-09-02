@@ -3,7 +3,7 @@
   "name": "__MSG_extensionName__",
   "description": "__MSG_extensionDescription__",
   "default_locale": "en",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "action": {
     "default_title": "__MSG_extensionName__",
     "default_popup": "popup.html",
@@ -15,12 +15,26 @@
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["activeTab", "scripting", "storage", "clipboardWrite"],
-  "optional_host_permissions": ["https://*/*", "http://*/*"],
-  "web_accessible_resources": [{
-    "resources": ["permission.html"],
-    "matches": ["<all_urls>"]
-  }],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "clipboardWrite"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "permission.html"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
   "icons": {
     "16": "icon16.png",
     "32": "icon32.png",

@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "fixed",
-  "scope": "preview",
-  "summary": "Keep preview controls stable on hover and show copy, download, and error feedback inside the relevant buttons"
-}
