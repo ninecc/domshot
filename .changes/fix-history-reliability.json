@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "fixed",
+  "scope": "history",
+  "summary": "Keep recent capture actions reliable with versioned messaging, bounded storage, chunked loading, committed writes, and complete preview cleanup"
+}

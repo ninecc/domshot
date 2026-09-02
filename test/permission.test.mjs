@@ -66,3 +66,12 @@ test('permission page applies its requested dark theme', async () => {
     assert.ok(Object.values(colors).every((value) => channels(value).every((channel) => channel < 60)), `unexpected dark surfaces: ${JSON.stringify(colors)}`);
   });
 });
+
+test('Chinese permission copy discloses that granted access persists', async () => {
+  await withChromePage({ url: `${permissionPageUrl}?lang=zh-CN` }, async (page) => {
+    await page.waitUntil(`document.documentElement.lang === 'zh-CN'`, 'Chinese permission copy was not applied');
+    const intro = await page.evaluate(`document.querySelector('[data-i18n="permissionIntro"]').textContent`);
+    assert.match(intro, /Chrome/);
+    assert.match(intro, /移除/);
+  });
+});

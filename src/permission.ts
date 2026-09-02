@@ -1,7 +1,7 @@
-import type { ExtensionMessage } from './types';
 import type { UiLocale } from './types';
 import { isUiLocale, localizeDocument, plural, resolveLocale, t } from './i18n';
 import { applyDocumentTheme, isUiTheme, resolveTheme } from './theme';
+import { sendExtensionMessage } from './messaging';
 import './permission.css';
 
 const grantButton = document.querySelector<HTMLButtonElement>('#grantPermission')!;
@@ -26,11 +26,7 @@ void loadRequest();
 
 async function loadRequest() {
   try {
-    const response = await chrome.runtime.sendMessage({ type: 'DOMSHOT_GET_IMAGE_PERMISSION', token } satisfies ExtensionMessage) as {
-      ok?: boolean;
-      origins?: string[];
-      patterns?: string[];
-    } | undefined;
+    const response = await sendExtensionMessage({ type: 'DOMSHOT_GET_IMAGE_PERMISSION', token });
     if (!response?.ok || !response.origins?.length || !response.patterns?.length) {
       showUnavailable(t(locale, 'requestExpired'));
       return;
@@ -60,7 +56,7 @@ grantButton.addEventListener('click', async () => {
       cancelButton.disabled = false;
       return;
     }
-    const result = await chrome.runtime.sendMessage({ type: 'DOMSHOT_COMPLETE_IMAGE_PERMISSION', token } satisfies ExtensionMessage) as { retried?: boolean } | undefined;
+    const result = await sendExtensionMessage({ type: 'DOMSHOT_COMPLETE_IMAGE_PERMISSION', token });
     status.textContent = t(locale, result?.retried ? 'authorizedRetrying' : 'authorizedNavigated');
     status.className = result?.retried ? 'permission-status is-success' : 'permission-status is-declined';
     grantButton.textContent = t(locale, result?.retried ? 'recapturing' : 'authorized');
@@ -75,7 +71,7 @@ grantButton.addEventListener('click', async () => {
 });
 
 cancelButton.addEventListener('click', async () => {
-  await chrome.runtime.sendMessage({ type: 'DOMSHOT_CANCEL_IMAGE_PERMISSION', token } satisfies ExtensionMessage);
+  await sendExtensionMessage({ type: 'DOMSHOT_CANCEL_IMAGE_PERMISSION', token });
   if (inline) window.parent.postMessage({ type: 'DOMSHOT_PERMISSION_CANCEL' }, '*');
   else window.close();
 });

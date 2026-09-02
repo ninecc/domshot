@@ -13,7 +13,7 @@ DOMShot is a Chrome Manifest V3 extension for capturing individual DOM elements 
 - Capture one element or the complete page DOM.
 - Export PNG, JPG, or WebP at 1×, 2×, or 3× scale.
 - Preview, copy, and download images without leaving the page.
-- Optionally keep up to 10 recent captures locally for previewing, copying, downloading, or deleting; saving is off by default and the oldest capture is removed automatically at the limit.
+- Optionally keep recent captures locally for previewing, copying, downloading, or deleting; saving is off by default and older captures are removed when the history budget is reached.
 - Save or remove an individual capture from its preview or post-copy/download notice without changing the global history preference; when history is turned off, choose whether to keep or delete existing captures.
 - Keep extension UI stable across browser page zoom and pinch zoom.
 - Process images locally in the browser without uploading them.
@@ -42,7 +42,7 @@ Open DOMShot on a regular web page, choose **Capture element**, **Capture visibl
 | Appearance | Auto | Follows the system theme or forces Light or Dark across popup, preview, selector, toast, and permission UI. |
 | After capture | Preview | Shows the preview, copies automatically, or downloads automatically after a successful capture. |
 | File names | Smart | Uses the page title for full pages and the element label for element captures; page-title and timestamp-only modes are also available. |
-| Add captures to history automatically | Off | Keeps up to 10 captures in this browser for quick access. Individual captures can still be added from the preview; turning this off offers to keep or delete existing captures. |
+| Add captures to history automatically | Off | Keeps captures in this browser for quick access. Individual captures can still be added from the preview; turning this off offers to keep or delete existing captures. |
 | Embed web fonts | On | Improves custom font fidelity, with additional processing time. |
 | Reconcile layout | Off | Improves text wrapping in inline and table-cell elements, but can roughly double capture time. |
 | Keep outer shadows | Off | Includes shadows and outlines around the captured root element. |
@@ -53,12 +53,13 @@ Settings are saved automatically.
 
 ## Privacy and permissions
 
-DOMShot does not request persistent access to every website and contains no telemetry or image-upload service. Recent capture saving is off by default. When enabled, up to 10 captures stay in local browser storage, are removed when the extension is uninstalled, and can be cleared at any time from Recent captures.
+DOMShot does not request persistent access to every website and contains no telemetry or image-upload service. Recent capture saving is off by default. When enabled, history keeps up to 10 captures, 64 MB per capture and 256 MB overall; older captures are removed when either limit is reached. Captures are removed when the extension is uninstalled and can be cleared at any time.
 
 - `activeTab`: access the current tab after a user action.
 - `scripting`: inject the capture script when requested.
 - `storage`: remember capture settings.
 - `clipboardWrite`: copy generated images.
+- Optional image-source permissions: requested only when you choose to reload blocked cross-origin images. Access is granted per site, image requests omit cookies, and the permission remains available for future captures until you remove it in Chrome.
 
 ## Development and tests
 

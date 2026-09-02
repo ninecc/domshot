@@ -21,15 +21,25 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       Object.defineProperty(chrome, 'i18n', { configurable: true, value: { getUILanguage: () => 'fr-FR' } });
       globalThis.__historyStore = [{
         id: 'capture-1', createdAt: 1788192000000, label: 'Pricing card', filename: 'domshot-pricing.png', format: 'png',
-        width: 1200, height: 800, scale: 2, size: 245760, sourceHost: 'example.com',
+        width: 1200, height: 800, scale: 2, size: 8, sourceHost: 'example.com',
         thumbnailDataUrl: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/%3E',
-        dataUrl: 'data:image/png;base64,iVBORw0KGgo='
+        dataBase64: 'iVBORw0KGgo='
       }];
       Object.defineProperty(chrome, 'runtime', { configurable: true, value: {
         async sendMessage(message) {
-          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 1 };
-          if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: globalThis.__historyStore.map(({ dataUrl, ...capture }) => capture) };
-          if (message.type === 'DOMSHOT_HISTORY_GET') return { capture: globalThis.__historyStore.find((capture) => capture.id === message.id) ?? null };
+          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 2 };
+          if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: globalThis.__historyStore.map(({ dataBase64, ...capture }) => capture) };
+          if (message.type === 'DOMSHOT_HISTORY_GET') {
+            const stored = globalThis.__historyStore.find((capture) => capture.id === message.id);
+            if (!stored) return { capture: null };
+            const { dataBase64, ...capture } = stored;
+            return { capture: { ...capture, mimeType: 'image/png', byteLength: atob(dataBase64).length } };
+          }
+          if (message.type === 'DOMSHOT_HISTORY_READ') {
+            const stored = globalThis.__historyStore.find((capture) => capture.id === message.id);
+            const binary = atob(stored.dataBase64).slice(message.offset, message.offset + message.length);
+            return { data: btoa(binary) };
+          }
           if (message.type === 'DOMSHOT_HISTORY_DELETE') { globalThis.__historyStore = globalThis.__historyStore.filter((capture) => capture.id !== message.id); return { ok: true }; }
           if (message.type === 'DOMSHOT_HISTORY_CLEAR') { globalThis.__historyStore = []; return { ok: true }; }
         }
@@ -596,6 +606,35 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
     assert.ok(Math.abs(emptyState.verticalOffset) < 0.5, 'empty history state must be vertically centered in the content area');
     assert.equal(emptyState.hint, '新截图不会自动加入此处，你仍可在预览中单独加入。');
     assert.equal(emptyState.historyIconPathCount, 3, 'history entry should use the clock-and-arrow icon');
+  });
+});
+
+test('popup rejects a stale background before offering history actions', async () => {
+  await withChromePage({
+    url: popupUrl,
+    viewport: { width: 360, height: 600 },
+    initScript: `
+      globalThis.__syncStore = {};
+      Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) });
+      Object.defineProperty(chrome, 'i18n', { configurable: true, value: { getUILanguage: () => 'en-US' } });
+      Object.defineProperty(chrome, 'runtime', { configurable: true, value: {
+        async sendMessage(message) {
+          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 1 };
+          if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: [{
+            id: 'legacy-capture', createdAt: 1, label: 'Legacy capture', filename: 'legacy.png', format: 'png',
+            width: 100, height: 80, scale: 1, size: 1, sourceHost: 'example.com', thumbnailDataUrl: 'data:image/png;base64,AA=='
+          }] };
+          if (message.type === 'DOMSHOT_HISTORY_GET') return { capture: { dataUrl: 'data:image/png;base64,AA==' } };
+        }
+      } });
+      Object.defineProperty(chrome, 'storage', { configurable: true, value: { sync: {
+        async get() { return {}; }, async set() {}
+      } } });
+    `,
+  }, async (page) => {
+    await page.evaluate(`document.querySelector('#historyButton').click()`);
+    await page.waitUntil(`document.querySelector('#status').textContent.includes('updated')`, 'Stale background was not rejected');
+    assert.equal(await page.evaluate(`document.querySelectorAll('.history-card').length`), 0, 'Legacy history actions should not be offered to a new popup');
   });
 });
 

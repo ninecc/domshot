@@ -1,5 +1,5 @@
 import type { CaptureHistoryDetail, CaptureHistoryItem, CaptureSettings, ExtensionMessage } from './types';
-import { BACKGROUND_PROTOCOL, CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
+import { BACKGROUND_PROTOCOL, CAPTURE_HISTORY_POLICY, CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import type { LanguagePreference, UiLocale } from './types';
 import { loadLanguagePreference, localizeDocument, resolveLocale, saveLanguagePreference, t } from './i18n';
 import type { ThemePreference, UiTheme } from './types';
@@ -7,6 +7,8 @@ import { applyDocumentTheme, loadThemePreference, resolveTheme, saveThemePrefere
 import { bindCaptureResultActions } from './capture-result';
 import type { CaptureResultActions, CaptureResultAsset } from './capture-result';
 import { clearCaptureHistory, deleteCaptureHistory, getCaptureHistory, listCaptureHistory } from './history-client';
+import { sendExtensionMessage } from './messaging';
+import { formatBytes } from './format';
 import './popup.css';
 
 const status = document.querySelector<HTMLElement>('#status')!;
@@ -48,6 +50,7 @@ let activeLocale: UiLocale = resolveLocale('auto');
 let activeTheme: UiTheme = resolveTheme('auto');
 let captures: CaptureHistoryItem[] = [];
 let activeCapture: CaptureHistoryDetail | null = null;
+let activeCaptureUrl: string | null = null;
 let clearConfirmationTimer: number | undefined;
 let historyActionCleanups: Array<() => void> = [];
 let detailResultActions: CaptureResultActions | null = null;
@@ -141,10 +144,6 @@ function applyThemePreference(preference: ThemePreference) {
   applyDocumentTheme(activeTheme);
 }
 
-async function historyMessage<T>(message: ExtensionMessage): Promise<T | undefined> {
-  try { return await chrome.runtime?.sendMessage(message) as T; } catch { return undefined; }
-}
-
 async function loadHistory(showFailure = true) {
   try {
     await ensureBackgroundReady();
@@ -156,7 +155,7 @@ async function loadHistory(showFailure = true) {
 }
 
 async function ensureBackgroundReady() {
-  const response = await historyMessage<{ protocol?: number }>({ type: 'DOMSHOT_BACKGROUND_PING' });
+  const response = await sendExtensionMessage({ type: 'DOMSHOT_BACKGROUND_PING' }).catch(() => null);
   if (response?.protocol !== BACKGROUND_PROTOCOL) throw new Error(t(activeLocale, 'extensionReloadRequired'));
 }
 
@@ -164,7 +163,7 @@ function renderHistory() {
   historyActionCleanups.forEach((cleanup) => cleanup());
   historyActionCleanups = [];
   historyList.replaceChildren();
-  historyCount.textContent = `${captures.length} / 10`;
+  historyCount.textContent = `${captures.length} / ${CAPTURE_HISTORY_POLICY.maxItems}`;
   historyBadge.textContent = String(captures.length);
   historyBadge.hidden = captures.length === 0;
   historyEmpty.hidden = captures.length !== 0;
@@ -230,8 +229,10 @@ async function withHistoryDetail(id: string, action: (detail: CaptureHistoryDeta
 
 async function openHistoryDetail(id: string) {
   await withHistoryDetail(id, async (capture) => {
+    closeHistoryDetail();
     activeCapture = capture;
-    detailImage.src = capture.dataUrl;
+    activeCaptureUrl = URL.createObjectURL(capture.blob);
+    detailImage.src = activeCaptureUrl;
     detailImage.alt = t(activeLocale, 'previewAlt', { label: capture.label });
     detailTitle.textContent = capture.label;
     detailMeta.textContent = `${capture.width} × ${capture.height} · ${capture.format.toUpperCase()} · ${formatBytes(capture.size)}`;
@@ -259,6 +260,8 @@ function closeHistoryDetail() {
   detailResultActions = null;
   historyDetail.hidden = true;
   detailImage.removeAttribute('src');
+  if (activeCaptureUrl) URL.revokeObjectURL(activeCaptureUrl);
+  activeCaptureUrl = null;
   activeCapture = null;
 }
 
@@ -269,16 +272,11 @@ async function loadHistoryAsset(id: string): Promise<CaptureResultAsset> {
 }
 
 async function captureDetailAsset(capture: CaptureHistoryDetail): Promise<CaptureResultAsset> {
-  return { blob: await (await fetch(capture.dataUrl)).blob(), format: capture.format, filename: capture.filename };
+  return { blob: capture.blob, format: capture.format, filename: capture.filename };
 }
 
 function formatHistoryDate(value: number) {
   return new Intl.DateTimeFormat(activeLocale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(value);
-}
-
-function formatBytes(bytes: number) {
-  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {

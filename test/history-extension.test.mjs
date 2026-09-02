@@ -73,6 +73,28 @@ test('a real capture is persisted by the extension service worker', async () => 
       return { error, count: history.captures.length };
     })()`);
     assert.equal(largeCapture.count, 1, `large capture was not stored: ${largeCapture.error}`);
+
+    const largeRead = await page.evaluate(`(async () => {
+      const detail = await chrome.runtime.sendMessage({ type: 'DOMSHOT_HISTORY_GET', id: 'large-capture' });
+      let bytes = 0;
+      let chunks = 0;
+      let largestMessage = 0;
+      const chunkSize = 3 * 256 * 1024;
+      for (let offset = 0; offset < detail.capture.byteLength; offset += chunkSize) {
+        const response = await chrome.runtime.sendMessage({
+          type: 'DOMSHOT_HISTORY_READ', id: 'large-capture', offset,
+          length: Math.min(chunkSize, detail.capture.byteLength - offset)
+        });
+        bytes += atob(response.data).length;
+        chunks += 1;
+        largestMessage = Math.max(largestMessage, response.data.length);
+      }
+      return { descriptorHasData: 'dataUrl' in detail.capture || 'blob' in detail.capture, bytes, chunks, largestMessage };
+    })()`);
+    assert.equal(largeRead.descriptorHasData, false, 'large history metadata should not contain the full image');
+    assert.equal(largeRead.bytes, 49 * 1024 * 1024);
+    assert.ok(largeRead.chunks > 1, 'large history images should use multiple read messages');
+    assert.ok(largeRead.largestMessage < 2 * 1024 * 1024, 'history read messages must remain bounded');
   } finally {
     await browser.close();
     await rm(profile, { recursive: true, force: true });

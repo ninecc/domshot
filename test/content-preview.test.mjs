@@ -14,6 +14,12 @@ test('content preview remains stable across script updates and zoom changes', as
     await context.test('replaces a stale injected content script', async () => {
       await page.evaluate(`
         window.__domShotLoaded = true;
+        globalThis.__domshotRevokedObjectUrls = [];
+        const revokeObjectUrl = URL.revokeObjectURL.bind(URL);
+        URL.revokeObjectURL = (url) => {
+          globalThis.__domshotRevokedObjectUrls.push(url);
+          revokeObjectUrl(url);
+        };
         chrome.runtime = {
           onMessage: {
             addListener(listener) { globalThis.__domshotListener = listener; },
@@ -39,6 +45,28 @@ test('content preview remains stable across script updates and zoom changes', as
       })()`);
       assert.ok(labels.title.length > 0 && labels.copy.length > 0);
       assert.doesNotMatch(`${labels.title} ${labels.copy}`, /[\u4e00-\u9fff]/, 'English capture controls should not contain Chinese copy');
+    });
+
+    await context.test('disposes a preview when another extension surface replaces it', async () => {
+      await capturePage(page, 1, 'en');
+      const revokedBefore = await page.evaluate(`globalThis.__domshotRevokedObjectUrls.length`);
+      await capturePage(page, 1, 'en');
+      const revokedAfter = await page.evaluate(`globalThis.__domshotRevokedObjectUrls.length`);
+      assert.equal(revokedAfter, revokedBefore + 1, 'Replacing a preview must release its image URL');
+    });
+
+    await context.test('opens and closes the preview as a keyboard-operable dialog', async () => {
+      await capturePage(page, 1, 'en');
+      const dialog = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        const close = shadow.querySelector('.close');
+        const rect = close.getBoundingClientRect();
+        return { focused: shadow.activeElement === close, width: rect.width, height: rect.height };
+      })()`);
+      assert.equal(dialog.focused, true, 'The preview should move focus to its close control');
+      assert.ok(dialog.width >= 32 && dialog.height >= 32, `Preview close target is only ${dialog.width} × ${dialog.height}px`);
+      await page.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`);
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root')`), null, 'Escape should close the preview');
     });
 
     await context.test('applies the requested theme to in-page UI', async () => {

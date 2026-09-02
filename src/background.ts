@@ -1,15 +1,13 @@
-import type { CaptureHistoryDetail, CaptureHistoryItem, ExtensionMessage, ResolvedImageResource } from './types';
-import { BACKGROUND_PROTOCOL } from './types';
+import type { CaptureHistoryItem, CaptureHistoryTransfer, ExtensionMessage, ResolvedImageResource } from './types';
+import { BACKGROUND_PROTOCOL, CAPTURE_HISTORY_POLICY } from './types';
 import { resolveLocale, t } from './i18n';
 import { resolveTheme } from './theme';
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const PERMISSION_REQUEST_TTL = 10 * 60 * 1000;
-const HISTORY_LIMIT = 10;
 const HISTORY_DB = 'domshot-history';
 const HISTORY_STORE = 'captures';
 const HISTORY_UPLOAD_TTL = 2 * 60 * 1000;
-const MAX_HISTORY_CHUNKS = 512;
 const MAX_ENCODED_CHUNK_LENGTH = 2 * 1024 * 1024;
 
 interface StoredCapture extends CaptureHistoryItem {
@@ -42,7 +40,11 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
 
   if (message.type === 'DOMSHOT_HISTORY_BEGIN') {
     cleanExpiredHistoryUploads();
-    if (message.totalChunks < 1 || message.totalChunks > MAX_HISTORY_CHUNKS) throw new Error('Invalid capture chunk count');
+    const expectedChunks = Math.max(1, Math.ceil(message.capture.size / CAPTURE_HISTORY_POLICY.chunkBytes));
+    if (!Number.isSafeInteger(message.capture.size) || message.capture.size < 0 || message.capture.size > CAPTURE_HISTORY_POLICY.maxCaptureBytes) {
+      throw new Error('Capture is too large for history');
+    }
+    if (message.totalChunks !== expectedChunks) throw new Error('Invalid capture chunk count');
     pendingHistoryCaptures.set(message.capture.id, {
       capture: message.capture,
       mimeType: message.mimeType,
@@ -85,7 +87,18 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
     const capture = await getHistoryCapture(message.id);
     if (!capture) return { capture: null };
     const { blob, ...metadata } = capture;
-    return { capture: { ...metadata, dataUrl: await blobToDataUrl(blob, blob.type) } satisfies CaptureHistoryDetail };
+    return { capture: { ...metadata, mimeType: blob.type, byteLength: blob.size } satisfies CaptureHistoryTransfer };
+  }
+
+  if (message.type === 'DOMSHOT_HISTORY_READ') {
+    if (!Number.isSafeInteger(message.offset) || message.offset < 0 || !Number.isSafeInteger(message.length)
+      || message.length < 1 || message.length > CAPTURE_HISTORY_POLICY.chunkBytes) {
+      throw new Error('Invalid capture read range');
+    }
+    const capture = await getHistoryCapture(message.id);
+    if (!capture || message.offset >= capture.blob.size) throw new Error('Capture is unavailable');
+    const bytes = new Uint8Array(await capture.blob.slice(message.offset, message.offset + message.length).arrayBuffer());
+    return { data: bufferToBase64(bytes) };
   }
 
   if (message.type === 'DOMSHOT_HISTORY_DELETE') {
@@ -105,9 +118,9 @@ async function handleMessage(message: ExtensionMessage, sender: chrome.runtime.M
 
   if (message.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION') {
     const tabId = sender.tab?.id;
-    if (!tabId) return { opened: false };
+    if (!tabId) return { prepared: false };
     const origins = validOrigins(message.origins);
-    if (!origins.length) return { opened: false };
+    if (!origins.length) return { prepared: false };
     const locale = message.locale ?? resolveLocale('auto');
     const theme = message.theme ?? resolveTheme('auto');
     const request = { tabId, origins, patterns: origins.map(originPattern), locale, theme, createdAt: Date.now() };
@@ -187,13 +200,24 @@ async function withHistoryStore<T>(mode: IDBTransactionMode, operation: (store: 
   return new Promise((resolve, reject) => {
     const transaction = database.transaction(HISTORY_STORE, mode);
     const request = operation(transaction.objectStore(HISTORY_STORE));
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Capture history operation failed'));
-    transaction.oncomplete = () => database.close();
-    transaction.onerror = () => {
+    let result: T;
+    let settled = false;
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
       database.close();
-      reject(transaction.error ?? new Error('Capture history transaction failed'));
+      reject(error);
     };
+    request.onsuccess = () => { result = request.result; };
+    request.onerror = () => fail(request.error ?? new Error('Capture history operation failed'));
+    transaction.oncomplete = () => {
+      if (settled) return;
+      settled = true;
+      database.close();
+      resolve(result);
+    };
+    transaction.onerror = () => fail(transaction.error ?? new Error('Capture history transaction failed'));
+    transaction.onabort = () => fail(transaction.error ?? new Error('Capture history transaction was aborted'));
   });
 }
 
@@ -206,7 +230,13 @@ async function saveHistoryCapture(capture: StoredCapture): Promise<void> {
     const allRequest = store.getAll();
     allRequest.onsuccess = () => {
       const oldestFirst = (allRequest.result as StoredCapture[]).sort((a, b) => a.createdAt - b.createdAt);
-      oldestFirst.slice(0, Math.max(0, oldestFirst.length - HISTORY_LIMIT)).forEach((item) => store.delete(item.id));
+      let totalBytes = oldestFirst.reduce((total, item) => total + item.size, 0);
+      while (oldestFirst.length > CAPTURE_HISTORY_POLICY.maxItems || totalBytes > CAPTURE_HISTORY_POLICY.maxTotalBytes) {
+        const oldest = oldestFirst.shift();
+        if (!oldest) break;
+        totalBytes -= oldest.size;
+        store.delete(oldest.id);
+      }
     };
     transaction.oncomplete = () => { database.close(); resolve(); };
     transaction.onerror = () => { database.close(); reject(transaction.error ?? new Error('Could not save capture history')); };
@@ -263,11 +293,15 @@ async function resolveImageResource(url: string): Promise<ResolvedImageResource>
 
 async function blobToDataUrl(blob: Blob, contentType: string) {
   const bytes = new Uint8Array(await blob.arrayBuffer());
+  return `data:${contentType};base64,${bufferToBase64(bytes)}`;
+}
+
+function bufferToBase64(bytes: Uint8Array) {
   let binary = '';
   for (let offset = 0; offset < bytes.length; offset += 0x8000) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
   }
-  return `data:${contentType};base64,${btoa(binary)}`;
+  return btoa(binary);
 }
 
 function validOrigins(values: string[]) {
