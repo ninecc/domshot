@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "fixed",
-  "scope": "capture",
-  "summary": "Keep capture progress visible without adding transparent padding to screenshots, and include page content that shares DOMShot UI identifiers"
-}
