@@ -2,6 +2,13 @@
 
 All notable changes to DOMShot are documented in this file.
 
+## [0.2.1] - 2026-09-05
+
+### Fixed
+
+- **capture:** Keep capture progress visible without adding transparent padding to screenshots, and include page content that shares DOMShot UI identifiers
+- **capture:** Preserve same-name page elements when opening or closing DOMShot controls and clean up inactive element pickers
+
 ## [0.2.0] - 2026-09-02
 
 ### Added
