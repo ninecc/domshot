@@ -5,10 +5,8 @@ import { CaptureHistorySession } from './history-client';
 import { sendExtensionMessage } from './messaging';
 import { formatBytes } from './format';
 import { contentUiStyleTags } from './content-ui';
+import { createHost, registerHostCleanup, removeHost } from './ui-host';
 
-export const CONTENT_UI_ROOT_ID = 'domshot-extension-root';
-const ROOT_ID = CONTENT_UI_ROOT_ID;
-const hostCleanups = new WeakMap<Element, () => void>();
 let currentPageZoom = 1;
 let currentPreviewUpdate: (() => void) | null = null;
 
@@ -39,7 +37,6 @@ export function showPreview({ image, blob, format, label, scale, failedImageCoun
   cancelRetry: (token: string) => void;
   initialCopyFailure?: boolean;
 }) {
-  removeExtensionUi();
   const host = createHost('preview', theme);
   syncPreviewViewport(host);
   const shadow = host.shadowRoot!;
@@ -236,7 +233,6 @@ export function historyToastAction(session: CaptureHistorySession, locale: UiLoc
 }
 
 export function showProgress(label: string, locale: UiLocale, theme: UiTheme): HTMLElement {
-  removeExtensionUi();
   const host = createHost('progress', theme);
   host.shadowRoot!.innerHTML = `
     ${contentUiStyleTags('toast')}
@@ -250,16 +246,16 @@ export function showError(message: string, locale: UiLocale, theme: UiTheme) {
   host.shadowRoot!.innerHTML = `
     ${contentUiStyleTags('toast')}
     <div class="toast error"><span class="error-mark">!</span><span><strong>${t(locale, 'captureFailed')}</strong><small>${escapeHtml(t(locale, 'checkResources', { message }))}</small></span><button type="button">${t(locale, 'close')}</button></div>`;
-  host.shadowRoot!.querySelector('button')!.addEventListener('click', () => host.remove());
+  host.shadowRoot!.querySelector('button')!.addEventListener('click', () => removeHost(host));
   document.documentElement.appendChild(host);
 }
 
 export function showToast(message: string, theme: UiTheme, action?: ToastAction) {
-  removeExtensionUi();
   const host = createHost('toast', theme);
   host.shadowRoot!.innerHTML = `${contentUiStyleTags('toast')}<div class="toast compact"><strong>${escapeHtml(message)}</strong>${action ? `<button type="button">${escapeHtml(action.label)}</button>` : ''}</div>`;
   document.documentElement.appendChild(host);
-  let timer = window.setTimeout(() => host.remove(), action ? 4200 : 1800);
+  let timer = window.setTimeout(() => removeHost(host), action ? 4200 : 1800);
+  registerHostCleanup(host, () => window.clearTimeout(timer));
   const button = host.shadowRoot!.querySelector<HTMLButtonElement>('button');
   button?.addEventListener('click', async () => {
     button.disabled = true;
@@ -267,18 +263,9 @@ export function showToast(message: string, theme: UiTheme, action?: ToastAction)
       host.shadowRoot!.querySelector('strong')!.textContent = await action!.run();
       button.remove();
       window.clearTimeout(timer);
-      timer = window.setTimeout(() => host.remove(), 1800);
+      timer = window.setTimeout(() => removeHost(host), 1800);
     } catch { button.disabled = false; }
   });
-}
-
-function createHost(kind: string, theme: UiTheme): HTMLDivElement {
-  const host = document.createElement('div');
-  host.id = ROOT_ID;
-  host.dataset.domshotUi = kind;
-  host.dataset.domshotTheme = theme;
-  host.attachShadow({ mode: 'open' });
-  return host;
 }
 
 function syncPreviewViewport(host: HTMLElement) {
@@ -311,25 +298,6 @@ export function setPageZoom(pageZoom: number) {
   currentPreviewUpdate?.();
 }
 
-function registerHostCleanup(host: Element, cleanup: () => void) {
-  const previous = hostCleanups.get(host);
-  hostCleanups.set(host, () => {
-    previous?.();
-    cleanup();
-  });
-}
-
-function removeHost(host: Element) {
-  const cleanup = hostCleanups.get(host);
-  hostCleanups.delete(host);
-  cleanup?.();
-  host.remove();
-}
-
-export function removeExtensionUi() {
-  document.querySelectorAll(`#${ROOT_ID}`).forEach(removeHost);
-}
-
 function imageOrigins(urls: string[]) {
   return Array.from(new Set(urls.map((url) => {
     try {
@@ -342,4 +310,3 @@ function imageOrigins(urls: string[]) {
 function escapeHtml(value: string) {
   return value.replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]!);
 }
-
