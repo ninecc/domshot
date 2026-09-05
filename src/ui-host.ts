@@ -1,3 +1,4 @@
+import type { SnapdomPlugin } from '@zumer/snapdom';
 import type { UiTheme } from './types';
 
 // Only one in-page surface is active. IDs and data attributes are presentation
@@ -38,3 +39,13 @@ export function isExtensionUi(element: Element): boolean {
   return currentHost?.element === element || Boolean(currentHost?.element.contains(element));
 }
 
+export function extensionUiCapturePlugin(): SnapdomPlugin {
+  // Keep the identity for this capture even if its live progress UI is replaced.
+  const root = currentHost?.element;
+  return {
+    name: 'domshot-ui-exclusion',
+    // Skip the original root and its entire subtree before cloning. Unlike the
+    // global filterMode: 'remove', this does not trigger SnapDOM's shrink pass.
+    resolveNode(node) { return node === root ? null : undefined; },
+  };
+}

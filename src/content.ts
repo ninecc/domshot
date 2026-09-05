@@ -8,7 +8,7 @@ import type { CaptureResultAsset } from './capture-result';
 import { CaptureHistorySession } from './history-client';
 import { trackImageResources } from './image-resource-tracker';
 import { selectorMarkup } from './content-ui';
-import { createHost, isExtensionUi, registerHostCleanup, removeExtensionUi, removeHost } from './ui-host';
+import { createHost, extensionUiCapturePlugin, isExtensionUi, registerHostCleanup, removeExtensionUi, removeHost } from './ui-host';
 import {
   historyToastAction,
   setPageZoom,
@@ -228,9 +228,8 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       outerShadows: settings.outerShadows,
       compress: settings.compress,
       clip,
-      exclude: ['#domshot-extension-root', '[data-domshot-ui]'],
       backgroundColor: settings.format === 'png' ? undefined : '#ffffff',
-      plugins: [imageResources.plugin],
+      plugins: [extensionUiCapturePlugin(), imageResources.plugin],
     });
 
     const image = await exportImage(result, settings.format, settings.quality);
