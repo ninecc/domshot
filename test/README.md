@@ -30,6 +30,7 @@ Puppeteer is preferred here because DOMShot targets Chrome MV3, uses CDP-specifi
 
 - `popup.test.mjs` verifies computed popup layout and interaction styles in Chrome.
 - `content-preview.test.mjs` verifies content-script takeover, capture dimensions, zoom compensation, cross-origin image warnings, and authorized retries.
+- `ui-host.test.mjs` verifies UI ownership, replacement, and picker disposal without affecting same-name page elements.
 - `permission.test.mjs` verifies that a declined host permission can be requested again and resumes the capture after approval.
 - `background-zoom.test.mjs` verifies tab zoom forwarding, exact-origin permission state, and background image resolution.
 - `support/chrome-page.mjs` owns browser launch, page setup, CDP access, waiting, and cleanup behind the `withChromePage` interface.

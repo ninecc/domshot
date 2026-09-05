@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "fixed",
+  "scope": "capture",
+  "summary": "Preserve same-name page elements when opening or closing DOMShot controls and clean up inactive element pickers"
+}

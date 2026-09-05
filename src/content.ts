@@ -8,10 +8,9 @@ import type { CaptureResultAsset } from './capture-result';
 import { CaptureHistorySession } from './history-client';
 import { trackImageResources } from './image-resource-tracker';
 import { selectorMarkup } from './content-ui';
+import { createHost, isExtensionUi, registerHostCleanup, removeExtensionUi, removeHost } from './ui-host';
 import {
-  CONTENT_UI_ROOT_ID as ROOT_ID,
   historyToastAction,
-  removeExtensionUi,
   setPageZoom,
   showError,
   showPreview,
@@ -100,7 +99,12 @@ function installMessageListener() {
     }
   };
   chrome.runtime.onMessage.addListener(listener);
-  return () => chrome.runtime.onMessage.removeListener(listener);
+  return () => {
+    chrome.runtime.onMessage.removeListener(listener);
+    currentSession?.destroy();
+    removeExtensionUi();
+    pendingCaptureRetries.clear();
+  };
 }
 
 function visibleViewportClip(): NonNullable<CaptureClip> {
@@ -114,7 +118,7 @@ function visibleViewportClip(): NonNullable<CaptureClip> {
 }
 
 class ViewfinderSession {
-  private host = document.createElement('div');
+  private host: HTMLDivElement;
   private shadow: ShadowRoot;
   private outline: HTMLElement;
   private label: HTMLElement;
@@ -123,10 +127,8 @@ class ViewfinderSession {
   private active = false;
 
   constructor(private settings: CaptureSettings, private locale: UiLocale, private theme: UiTheme) {
-    this.host.id = ROOT_ID;
-    this.host.dataset.domshotUi = 'selector';
-    this.host.dataset.domshotTheme = theme;
-    this.shadow = this.host.attachShadow({ mode: 'open' });
+    this.host = createHost('selector', theme);
+    this.shadow = this.host.shadowRoot!;
     this.shadow.innerHTML = selectorMarkup(this.locale);
     this.outline = this.shadow.querySelector<HTMLElement>('.outline')!;
     this.label = this.shadow.querySelector<HTMLElement>('.element-label')!;
@@ -134,9 +136,9 @@ class ViewfinderSession {
   }
 
   start() {
-    removeExtensionUi();
     document.documentElement.appendChild(this.host);
     this.active = true;
+    registerHostCleanup(this.host, () => this.dispose());
     document.addEventListener('mousemove', this.onMove, true);
     document.addEventListener('click', this.onClick, true);
     document.addEventListener('keydown', this.onKeyDown, true);
@@ -145,6 +147,10 @@ class ViewfinderSession {
   }
 
   destroy() {
+    removeHost(this.host);
+  }
+
+  private dispose() {
     if (!this.active) return;
     this.active = false;
     document.removeEventListener('mousemove', this.onMove, true);
@@ -152,13 +158,12 @@ class ViewfinderSession {
     document.removeEventListener('keydown', this.onKeyDown, true);
     document.removeEventListener('scroll', this.onViewportChange, true);
     window.removeEventListener('resize', this.onViewportChange);
-    this.host.remove();
     if (currentSession === this) currentSession = null;
   }
 
   private onMove = (event: MouseEvent) => {
     const candidate = document.elementFromPoint(event.clientX, event.clientY);
-    if (!candidate || candidate === this.host || candidate.closest(`#${ROOT_ID}`)) return;
+    if (!candidate || isExtensionUi(candidate)) return;
     if (candidate === this.hovered) return;
     this.hovered = candidate;
     this.updateOutline();
@@ -223,7 +228,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       outerShadows: settings.outerShadows,
       compress: settings.compress,
       clip,
-      exclude: [`#${ROOT_ID}`, '[data-domshot-ui]'],
+      exclude: ['#domshot-extension-root', '[data-domshot-ui]'],
       backgroundColor: settings.format === 'png' ? undefined : '#ffffff',
       plugins: [imageResources.plugin],
     });
@@ -232,7 +237,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
     const blob = await imageToBlob(image, settings.format, locale);
     const resourceReport = imageResources.report();
     const filename = captureFilename(settings.filenameMode, label, settings.format, target === document.documentElement);
-    progress.remove();
+    removeHost(progress);
     const asset: CaptureResultAsset = { blob, format: settings.format, filename };
     const historySession = new CaptureHistorySession({
       createdAt: Date.now(), label, filename, format: settings.format,
@@ -274,7 +279,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       showToast(t(locale, 'downloadStarted'), theme, historyToastAction(historySession, locale));
     }
   } catch (error) {
-    progress.remove();
+    removeHost(progress);
     showError(error instanceof Error ? error.message : t(locale, 'pageResourceFailed'), locale, theme);
   }
 }
