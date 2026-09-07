@@ -2,6 +2,19 @@
 
 All notable changes to DOMShot are documented in this file.
 
+## [0.2.2] - 2026-09-07
+
+### Changed
+
+- **build:** Reduce the packaged extension size by excluding development source maps from production builds
+
+### Fixed
+
+- **capture:** Capture the current visible area when a delayed capture starts instead of using an outdated viewport position
+- **capture:** Preserve off-screen content, document backgrounds, and viewport coordinates when capturing horizontally scrollable pages
+- **capture:** Prevent phantom pseudo-element borders and preserve content spacing when reconstructing styled pages
+- **capture:** Preserve direct icon-font glyphs when web-font embedding is enabled, and report undecodable inline images instead of treating them as successfully loaded
+
 ## [0.2.1] - 2026-09-05
 
 ### Fixed

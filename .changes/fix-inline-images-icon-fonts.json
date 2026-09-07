@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "fixed",
-  "scope": "capture",
-  "summary": "Preserve direct icon-font glyphs when web-font embedding is enabled, and report undecodable inline images instead of treating them as successfully loaded"
-}

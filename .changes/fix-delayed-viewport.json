@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "fixed",
-  "scope": "capture",
-  "summary": "Capture the current visible area when a delayed capture starts instead of using an outdated viewport position"
-}
