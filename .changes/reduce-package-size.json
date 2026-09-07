@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "changed",
+  "scope": "build",
+  "summary": "Reduce the packaged extension size by excluding development source maps from production builds"
+}

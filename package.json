@@ -15,7 +15,7 @@
     "dev": "node scripts/build.mjs --watch"
   },
   "dependencies": {
-    "@zumer/snapdom": "^2.24.7"
+    "@zumer/snapdom": "2.24.10"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.4",

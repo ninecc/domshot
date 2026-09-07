@@ -90,6 +90,8 @@ Repository maintainers must create the `changelog: skip` label, allow GitHub Act
 
 ## Limitations
 
+- Full-page captures preserve the current viewport layout and include document overflow; nested scroll containers retain their visible contents. Fixed and sticky elements appear once at their current positions. Captures do not automatically scroll to load additional content.
+
 - Protected pages such as `chrome://` pages and extension stores do not allow script injection.
 - Cross-origin images and fonts without suitable CORS headers may not be embedded.
 - Very large pages are limited by browser memory and maximum Canvas dimensions.

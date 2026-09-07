@@ -1,4 +1,5 @@
 import { build, context } from 'esbuild';
+import { snapdomCompatibility } from './snapdom-compat.mjs';
 import { cp, mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
@@ -26,10 +27,11 @@ const config = {
     content: resolve(root, 'src/content.ts'),
   },
   bundle: true,
+  plugins: [snapdomCompatibility],
   outdir,
   format: 'iife',
   target: 'chrome120',
-  sourcemap: true,
+  sourcemap: watch,
   minify: !watch,
 };
 
