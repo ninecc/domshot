@@ -34,6 +34,7 @@ Puppeteer is preferred here because DOMShot targets Chrome MV3, uses CDP-specifi
 - `content-ui-isolation.test.mjs` verifies that extension UI stays out of captures without changing dimensions, removing same-name page elements, or trimming intentional transparency.
 - `permission.test.mjs` verifies that a declined host permission can be requested again and resumes the capture after approval.
 - `background-zoom.test.mjs` verifies tab zoom forwarding, exact-origin permission state, and background image resolution.
+- `build-artifacts.test.mjs` verifies that production packages exclude development source maps and remain within their size budget.
 - `support/chrome-page.mjs` owns browser launch, page setup, CDP access, waiting, and cleanup behind the `withChromePage` interface.
 
 - `capture-request.test.mjs` verifies that delayed viewport captures use the viewport at render time.

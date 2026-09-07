@@ -31,7 +31,7 @@ const config = {
   outdir,
   format: 'iife',
   target: 'chrome120',
-  sourcemap: true,
+  sourcemap: watch,
   minify: !watch,
 };
 
