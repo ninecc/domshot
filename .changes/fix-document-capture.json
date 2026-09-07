@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "fixed",
-  "scope": "capture",
-  "summary": "Preserve off-screen content, document backgrounds, and viewport coordinates when capturing horizontally scrollable pages"
-}
