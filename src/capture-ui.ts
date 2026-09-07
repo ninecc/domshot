@@ -1,3 +1,4 @@
+import type { CaptureRequest } from './capture-request';
 import type { CaptureFormat, CaptureSettings, UiLocale, UiTheme } from './types';
 import { plural, t } from './i18n';
 import { bindCaptureResultActions } from './capture-result';
@@ -10,14 +11,12 @@ import { createHost, registerHostCleanup, removeHost } from './ui-host';
 let currentPageZoom = 1;
 let currentPreviewUpdate: (() => void) | null = null;
 
-export type CaptureClip = { x: number; y: number; width: number; height: number } | null;
 export interface CaptureRetry {
-  target: Element;
+  request: CaptureRequest;
   settings: CaptureSettings;
   label: string;
   locale: UiLocale;
   theme: UiTheme;
-  clip: CaptureClip;
 }
 
 export function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, theme, filename, historySession, retry, registerRetry, cancelRetry, initialCopyFailure }: {

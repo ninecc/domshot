@@ -36,6 +36,8 @@ Puppeteer is preferred here because DOMShot targets Chrome MV3, uses CDP-specifi
 - `background-zoom.test.mjs` verifies tab zoom forwarding, exact-origin permission state, and background image resolution.
 - `support/chrome-page.mjs` owns browser launch, page setup, CDP access, waiting, and cleanup behind the `withChromePage` interface.
 
+- `capture-request.test.mjs` verifies that delayed viewport captures use the viewport at render time.
+
 ## Assertion principles
 
 1. **Assert contracts, not representations.** Tests should protect promised behaviour and outcomes without depending on incidental DOM structure, styling techniques, or serialization details.

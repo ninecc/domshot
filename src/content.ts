@@ -1,4 +1,7 @@
-import { snapdom } from '@zumer/snapdom';
+import { renderCapture } from './capture-renderer';
+import { captureTarget } from './capture-request';
+import type { CaptureRequest } from './capture-request';
+import type { snapdom } from '@zumer/snapdom';
 import type { CaptureFormat, CaptureSettings, ExtensionMessage, UiLocale, UiTheme } from './types';
 import { CONTENT_SCRIPT_PROTOCOL, DEFAULT_SETTINGS } from './types';
 import { plural, resolveLocale, t } from './i18n';
@@ -17,7 +20,7 @@ import {
   showProgress,
   showToast,
 } from './capture-ui';
-import type { CaptureClip, CaptureRetry } from './capture-ui';
+import type { CaptureRetry } from './capture-ui';
 
 declare global {
   interface Window {
@@ -37,7 +40,7 @@ if (window.__domShotProtocol !== CONTENT_SCRIPT_PROTOCOL) {
 }
 
 let currentSession: ViewfinderSession | null = null;
-const pendingCaptureRetries = new Map<string, { target: Element; settings: CaptureSettings; label: string; locale: UiLocale; theme: UiTheme; clip: CaptureClip; expires: number }>();
+const pendingCaptureRetries = new Map<string, CaptureRetry & { expires: number }>();
 
 function registerCaptureRetry(token: string, retry: CaptureRetry) {
   pendingCaptureRetries.set(token, { ...retry, expires: Date.now() + 10 * 60 * 1000 });
@@ -71,7 +74,7 @@ function installMessageListener() {
       currentSession = null;
       const locale = message.locale ?? resolveLocale('auto');
       const theme = message.theme ?? resolveTheme('auto');
-      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale, theme, null);
+      void captureElement({ kind: 'page', document }, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale, theme);
       sendResponse({ started: true });
       return;
     }
@@ -82,7 +85,7 @@ function installMessageListener() {
       currentSession = null;
       const locale = message.locale ?? resolveLocale('auto');
       const theme = message.theme ?? resolveTheme('auto');
-      void captureElement(document.documentElement, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'visibleArea'), locale, theme, visibleViewportClip());
+      void captureElement({ kind: 'viewport', document }, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'visibleArea'), locale, theme);
       sendResponse({ started: true });
       return;
     }
@@ -90,11 +93,11 @@ function installMessageListener() {
     if (message.type === 'DOMSHOT_RETRY_CAPTURE') {
       const retry = pendingCaptureRetries.get(message.token);
       pendingCaptureRetries.delete(message.token);
-      if (!retry || retry.expires < Date.now() || !retry.target.isConnected) {
+      if (!retry || retry.expires < Date.now() || !captureTarget(retry.request).isConnected) {
         sendResponse({ started: false });
         return;
       }
-      void captureElement(retry.target, retry.settings, retry.label, retry.locale, retry.theme, retry.clip);
+      void captureElement(retry.request, retry.settings, retry.label, retry.locale, retry.theme);
       sendResponse({ started: true });
     }
   };
@@ -104,16 +107,6 @@ function installMessageListener() {
     currentSession?.destroy();
     removeExtensionUi();
     pendingCaptureRetries.clear();
-  };
-}
-
-function visibleViewportClip(): NonNullable<CaptureClip> {
-  const viewport = window.visualViewport;
-  return {
-    x: viewport?.pageLeft ?? window.scrollX,
-    y: viewport?.pageTop ?? window.scrollY,
-    width: viewport?.width ?? window.innerWidth,
-    height: viewport?.height ?? window.innerHeight,
   };
 }
 
@@ -203,7 +196,7 @@ class ViewfinderSession {
     this.outline.classList.add('capturing');
     window.setTimeout(async () => {
       this.destroy();
-      await captureElement(target, this.settings, label, this.locale, this.theme, null);
+      await captureElement({ kind: 'element', element: target }, this.settings, label, this.locale, this.theme);
     }, 120);
   };
 
@@ -215,22 +208,13 @@ class ViewfinderSession {
   };
 }
 
-async function captureElement(target: Element, settings: CaptureSettings, label: string, locale: UiLocale, theme: UiTheme, clip: CaptureClip) {
+async function captureElement(request: CaptureRequest, settings: CaptureSettings, label: string, locale: UiLocale, theme: UiTheme) {
+  const target = captureTarget(request);
   const progress = showProgress(label, locale, theme);
   const imageResources = trackImageResources();
   try {
     if (settings.captureDelay > 0) await new Promise((resolve) => window.setTimeout(resolve, settings.captureDelay));
-    const result = await snapdom(target, {
-      scale: settings.scale,
-      dpr: 1,
-      embedFonts: settings.embedFonts,
-      reconcile: settings.reconcile,
-      outerShadows: settings.outerShadows,
-      compress: settings.compress,
-      clip,
-      backgroundColor: settings.format === 'png' ? undefined : '#ffffff',
-      plugins: [extensionUiCapturePlugin(), imageResources.plugin],
-    });
+    const result = await renderCapture(request, settings, [extensionUiCapturePlugin(), imageResources.plugin]);
 
     const image = await exportImage(result, settings.format, settings.quality);
     const blob = await imageToBlob(image, settings.format, locale);
@@ -260,7 +244,7 @@ async function captureElement(target: Element, settings: CaptureSettings, label:
       theme,
       filename,
       historySession,
-      retry: { target, settings, label, locale, theme, clip },
+      retry: { request, settings, label, locale, theme },
       registerRetry: registerCaptureRetry,
       cancelRetry: (token: string) => pendingCaptureRetries.delete(token),
     };
