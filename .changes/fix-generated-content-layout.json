@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "fixed",
+  "scope": "capture",
+  "summary": "Prevent phantom pseudo-element borders and preserve content spacing when reconstructing styled pages"
+}

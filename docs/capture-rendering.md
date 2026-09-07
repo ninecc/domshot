@@ -31,3 +31,9 @@ Font embedding must not skip a required font or its source URL merely because it
 Before rendering, tracked inline images must decode successfully with nonzero intrinsic dimensions. Decode work is deduplicated per data URL and limited to six concurrent decoders, each with a three-second deadline. Load, decode and timeout failures are recorded separately. Invalid/timeout data images receive a size-preserving placeholder; only load failures with HTTP(S) sources participate in the existing permission-retry flow. This validates image decoding, not every nested dependency inside an SVG, and does not add coverage for fonts, CSS backgrounds or all generated images to the failure report.
 
 `capture-resources.test.mjs` uses an original 720-byte fixture font mapping U+E001 to a filled triangle. It tests element capture (so the document's original font stylesheet cannot hide missing embedding), mixed direct/pseudo use, two scales, and valid/invalid inline PNG and SVG resources. The fixture contains no third-party font data.
+
+## Generated content and style isolation
+
+`::before`/`::after` with `content: none` or `normal`, and pseudos with `display: none`, do not generate a painted box. The engine compatibility patch enforces that boundary while retaining empty-string decorations and first-letter styling.
+
+`snapshot-styles.ts` removes mapped source HTML stylesheets from the cloned tree after computed styles and generated content have been captured. Source selectors must not reapply to a reconstructed tree containing synthetic pseudo-element nodes. Engine styles/font embeddings and SVG styles are retained. Tests protect visible decorations and meaningful content spacing; the product does not promise pixel-identical browser screenshots.

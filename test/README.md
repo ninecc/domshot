@@ -40,6 +40,7 @@ Puppeteer is preferred here because DOMShot targets Chrome MV3, uses CDP-specifi
 - `document-capture.test.mjs` verifies document overflow, viewport coordinates, nested clipping and background transparency/positioning.
 
 - `capture-resources.test.mjs` verifies direct and pseudo-element icon glyphs plus inline-image decoding and permission behavior.
+- `pseudo-elements.test.mjs` verifies generated-content visibility and prevents source selectors from collapsing spacing after cloning.
 ## Assertion principles
 
 1. **Assert contracts, not representations.** Tests should protect promised behaviour and outcomes without depending on incidental DOM structure, styling techniques, or serialization details.

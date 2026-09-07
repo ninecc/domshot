@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { transform } from 'esbuild';
 
-// Version-guarded fixes for SnapDOM 2.24.10: document scrolling and font
-// embedding. Patch engine decisions, not generated DOM or page-specific names.
+// Version-guarded fixes for SnapDOM 2.24.10: document scrolling, font
+// embedding and pseudo-element generation. Patch engine decisions, not generated DOM or page-specific names.
 export const snapdomCompatibility = {
   name: 'snapdom-compatibility',
   setup(build) {
@@ -25,7 +25,14 @@ export const snapdomCompatibility = {
       const fontCode = code.slice(start, end);
       const iconChecks = /dt\((?:[a-zA-Z]+(?:\.href)?)\)/g;
       if ((fontCode.match(iconChecks) || []).length !== 8) throw new Error('Review SnapDOM icon-font exclusion changes');
-      const patched = code.slice(0, start) + fontCode.replace(iconChecks, 'false') + code.slice(end);
+      let patched = code.slice(0, start) + fontCode.replace(iconChecks, 'false') + code.slice(end);
+      const pseudoProbe = '    let c = N(t, a);\n    if (!c ||';
+      if (patched.split(pseudoProbe).length !== 2) throw new Error('Review SnapDOM pseudo-element generation changes');
+      // Styled ::before/::after do not exist without generated content.
+      // An empty quoted string is valid; ::first-letter has different rules.
+      patched = patched.replace(pseudoProbe, `    let c = N(t, a);
+    if (c && (c.display === "none" || (a !== "::first-letter" && (c.content === "none" || c.content === "normal")))) continue;
+    if (!c ||`);
       applied = true;
       return { contents: patched.replace(before, `if ((o.clip && h === t) || o.__domshotDocumentRoots?.includes(h)) continue;`), loader: 'js' };
     });
