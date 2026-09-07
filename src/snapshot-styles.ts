@@ -6,7 +6,7 @@ import type { SnapdomPlugin } from '@zumer/snapdom';
 export function snapshotStylesPlugin(): SnapdomPlugin {
   return {
     name: 'domshot-snapshot-styles',
-    afterClone({ nodeMap }) {
+    beforeRender({ nodeMap }) {
       for (const [copy, source] of nodeMap ?? []) {
         if (!(source instanceof Element) || source.namespaceURI !== 'http://www.w3.org/1999/xhtml') continue;
         if (source.localName === 'style' || (source.localName === 'link' && source.getAttribute('rel')?.split(/\s+/).includes('stylesheet'))) {
