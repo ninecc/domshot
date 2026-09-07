@@ -90,7 +90,11 @@ test('content preview remains stable across script updates and zoom changes', as
       await page.evaluate('scrollTo(0, 400)');
       const viewport = await page.evaluate(`({ width: innerWidth, height: innerHeight })`);
       await requestVisibleArea(page);
-      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Visible-area preview did not appear');
+      await page.waitUntil(`(() => {
+        const host = document.querySelector('#domshot-extension-root');
+        const image = host?.shadowRoot?.querySelector('.image-stage img');
+        return host?.dataset.domshotUi === 'preview' && image?.complete && image.naturalWidth > 0;
+      })()`, 'Visible-area preview image did not become ready');
       const imageSize = await page.evaluate(`(() => {
         const image = document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.image-stage img');
         return { width: image.naturalWidth, height: image.naturalHeight };
@@ -201,6 +205,7 @@ test('content preview remains stable across script updates and zoom changes', as
       for (const pageZoom of [0.5, 0.8, 1, 1.25, 1.5, 2]) {
         for (const pinchZoom of [1, 1.5, 2]) {
           await page.setPageScale(pinchZoom);
+          await page.waitUntil(`Math.abs(visualViewport.scale - ${pinchZoom}) < 0.001`, `Visual viewport did not reach ${pinchZoom}× pinch zoom`);
           await capturePage(page, pageZoom);
           results.push(await previewMetrics(page, pageZoom));
         }
@@ -473,8 +478,10 @@ async function capturePage(page, pageZoom, locale = 'zh-CN', theme = 'light') {
   await requestFullPage(page, { pageZoom }, locale, theme);
   await page.waitUntil(`(() => {
     const host = document.querySelector('#domshot-extension-root');
-    return host?.dataset.domshotUi === 'preview' && Boolean(host.shadowRoot?.querySelector('.preview-card img')?.complete);
-  })()`, 'Preview did not become ready');
+    const image = host?.shadowRoot?.querySelector('.preview-card img');
+    return host?.dataset.domshotUi === 'preview' && image?.complete && image.naturalWidth > 0;
+  })()`, 'Preview image did not become ready');
+  await page.nextFrames();
 }
 
 async function requestFullPage(page, overrides = {}, locale = 'zh-CN', theme = 'light') {
