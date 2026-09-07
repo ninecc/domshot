@@ -53,7 +53,7 @@ export interface CaptureSettings {
   compress: boolean;
 }
 
-export const CONTENT_SCRIPT_PROTOCOL = 12;
+export const CONTENT_SCRIPT_PROTOCOL = 13;
 export const BACKGROUND_PROTOCOL = 3;
 
 export interface ResolvedImageResource {

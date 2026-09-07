@@ -39,6 +39,7 @@ Puppeteer is preferred here because DOMShot targets Chrome MV3, uses CDP-specifi
 - `capture-request.test.mjs` verifies that delayed viewport captures use the viewport at render time.
 - `document-capture.test.mjs` verifies document overflow, viewport coordinates, nested clipping and background transparency/positioning.
 
+- `capture-resources.test.mjs` verifies direct and pseudo-element icon glyphs plus inline-image decoding and permission behavior.
 ## Assertion principles
 
 1. **Assert contracts, not representations.** Tests should protect promised behaviour and outcomes without depending on incidental DOM structure, styling techniques, or serialization details.
