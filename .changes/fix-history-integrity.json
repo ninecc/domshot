@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "fixed",
-  "scope": "history",
-  "summary": "Make history commits idempotent, keep large lists memory-safe, enforce physical quotas, and preserve captures when optional saves fail."
-}

@@ -1,6 +1,0 @@
-{
-  "$schema": "./schema.json",
-  "type": "fixed",
-  "scope": "images",
-  "summary": "Resolve permission-blocked image elements and CSS backgrounds, follow redirects, and preserve sprite crops and failed-image layout."
-}
