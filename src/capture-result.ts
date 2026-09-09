@@ -1,6 +1,8 @@
 import { t } from './i18n';
 import type { CaptureFormat, UiLocale } from './types';
 
+const DOWNLOAD_URL_REVOKE_DELAY = 30_000;
+
 export interface CaptureResultAsset {
   blob: Blob;
   format: CaptureFormat;
@@ -89,7 +91,9 @@ export function downloadCaptureResult(asset: CaptureResultAsset): void {
   anchor.href = url;
   anchor.download = asset.filename;
   anchor.click();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  // Chrome may pick up a synthetic download asynchronously. Keep the URL alive
+  // for a bounded grace period, then always release its backing Blob.
+  window.setTimeout(() => URL.revokeObjectURL(url), DOWNLOAD_URL_REVOKE_DELAY);
 }
 
 async function convertToPng(blob: Blob, locale: UiLocale): Promise<Blob> {

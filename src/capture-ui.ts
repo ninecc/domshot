@@ -19,7 +19,7 @@ export interface CaptureRetry {
   theme: UiTheme;
 }
 
-export function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, theme, filename, historySession, retry, registerRetry, cancelRetry, initialCopyFailure }: {
+export function showPreview({ image, blob, format, label, scale, failedImageCount, failedImageUrls, locale, theme, filename, historySession, retry, registerRetry, cancelRetry, initialCopyFailure, initialHistoryMessage }: {
   image: HTMLImageElement;
   blob: Blob;
   format: CaptureFormat;
@@ -35,6 +35,7 @@ export function showPreview({ image, blob, format, label, scale, failedImageCoun
   registerRetry: (token: string, retry: CaptureRetry) => void;
   cancelRetry: (token: string) => void;
   initialCopyFailure?: boolean;
+  initialHistoryMessage?: string;
 }) {
   const host = createHost('preview', theme);
   syncPreviewViewport(host);
@@ -79,7 +80,7 @@ export function showPreview({ image, blob, format, label, scale, failedImageCoun
     locale,
     loadAsset: async () => ({ blob, format, filename }),
   });
-  const historyControlCleanup = bindHistoryRetention(shadow, historySession, locale);
+  const historyControlCleanup = bindHistoryRetention(shadow, historySession, locale, initialHistoryMessage);
   const showButtonState = (button: HTMLButtonElement, text: string, state: 'success' | 'error', resetText: string, announcement = text) => {
     const currentTimer = resetTimers.get(button);
     if (currentTimer !== undefined) window.clearTimeout(currentTimer);
@@ -177,22 +178,48 @@ export function showPreview({ image, blob, format, label, scale, failedImageCoun
   if (initialCopyFailure) resultActions.showInitialCopyFailure();
 }
 
-function bindHistoryRetention(root: ParentNode, session: CaptureHistorySession, locale: UiLocale): () => void {
+function bindHistoryRetention(root: ParentNode, session: CaptureHistorySession, locale: UiLocale, initialMessage?: string): () => void {
   const status = root.querySelector<HTMLElement>('.history-retention-status')!;
   const button = root.querySelector<HTMLButtonElement>('.history-retention-toggle')!;
   let removedByUser = false;
+  let message = initialMessage;
+  let disposed = false;
+  let busy = false;
   const render = () => {
-    status.textContent = session.saved
+    status.textContent = message ?? (session.saved
       ? `✓ ${t(locale, 'savedToRecent')}`
-      : t(locale, removedByUser ? 'notKeptInRecent' : 'historyNotSaved');
+      : t(locale, removedByUser ? 'notKeptInRecent' : 'historyNotSaved'));
     button.textContent = session.saved
       ? t(locale, 'dontSaveThisCapture')
       : t(locale, removedByUser ? 'restoreHistorySave' : 'saveToRecent');
     button.dataset.state = session.saved ? 'remove' : 'save';
   };
-  const toggle = async () => {
+  const refresh = async () => {
+    if (disposed || busy) return;
+    busy = true;
     button.disabled = true;
     try {
+      await session.refresh();
+      if (disposed) return;
+      removedByUser = false;
+      message = undefined;
+      render();
+    } catch {
+      if (!disposed) status.textContent = t(locale, 'historyActionFailed');
+    } finally {
+      busy = false;
+      if (!disposed) button.disabled = false;
+    }
+  };
+  const toggle = async () => {
+    if (disposed || busy) return;
+    busy = true;
+    button.disabled = true;
+    try {
+      await session.refresh();
+      if (disposed) return;
+      message = undefined;
+      removedByUser = false;
       if (session.saved) {
         await session.remove();
         removedByUser = true;
@@ -200,14 +227,29 @@ function bindHistoryRetention(root: ParentNode, session: CaptureHistorySession, 
         await session.save();
         removedByUser = false;
       }
+      message = undefined;
       render();
     } catch {
-      status.textContent = t(locale, 'historyActionFailed');
-    } finally { button.disabled = false; }
+      if (!disposed) status.textContent = t(locale, 'historyActionFailed');
+    } finally {
+      busy = false;
+      if (!disposed) button.disabled = false;
+    }
+  };
+  const onFocus = () => void refresh();
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'visible') void refresh();
   };
   button.addEventListener('click', toggle);
+  window.addEventListener('focus', onFocus);
+  document.addEventListener('visibilitychange', onVisibilityChange);
   render();
-  return () => button.removeEventListener('click', toggle);
+  return () => {
+    disposed = true;
+    button.removeEventListener('click', toggle);
+    window.removeEventListener('focus', onFocus);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+  };
 }
 
 type ToastAction = { label: string; run: () => Promise<string> };
@@ -300,8 +342,7 @@ export function setPageZoom(pageZoom: number) {
 function imageOrigins(urls: string[]) {
   return Array.from(new Set(urls.map((url) => {
     try {
-      const parsed = new URL(url);
-      return `${parsed.protocol}//${parsed.hostname}`;
+      return new URL(url).origin;
     } catch { return ''; }
   }).filter(Boolean))).slice(0, 16);
 }

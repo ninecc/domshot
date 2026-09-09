@@ -36,7 +36,23 @@ export function removeExtensionUi() {
 }
 
 export function isExtensionUi(element: Element): boolean {
-  return currentHost?.element === element || Boolean(currentHost?.element.contains(element));
+  if (!currentHost) return false;
+  if (currentHost.element === element || currentHost.element.contains(element)) return true;
+  const root = element.getRootNode();
+  return root instanceof ShadowRoot && root.host === currentHost.element;
+}
+
+export function showHostNotice(message: string) {
+  const shadow = currentHost?.element.shadowRoot;
+  if (!shadow) return;
+  shadow.querySelector('[data-domshot-notice]')?.remove();
+  const notice = document.createElement('div');
+  notice.dataset.domshotNotice = '';
+  notice.setAttribute('role', 'status');
+  notice.textContent = message;
+  notice.style.cssText = 'position:fixed;left:50%;bottom:18px;z-index:1;max-width:420px;padding:9px 12px;border-radius:9px;color:#fff;background:rgba(15,23,42,.92);box-shadow:0 8px 24px rgba(15,23,42,.24);font:600 11px/1.4 Inter,"PingFang SC","Microsoft YaHei",sans-serif;transform:translateX(-50%);pointer-events:none';
+  shadow.appendChild(notice);
+  window.setTimeout(() => notice.remove(), 2400);
 }
 
 export function extensionUiCapturePlugin(): SnapdomPlugin {

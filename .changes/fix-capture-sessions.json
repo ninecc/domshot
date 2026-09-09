@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "fixed",
+  "scope": "capture",
+  "summary": "Keep concurrent capture UI, zoomed selectors, classic-scrollbar viewports, and delayed download handoff stable."
+}

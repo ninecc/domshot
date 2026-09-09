@@ -11,7 +11,7 @@ import type { CaptureResultAsset } from './capture-result';
 import { CaptureHistorySession } from './history-client';
 import { trackImageResources } from './image-resource-tracker';
 import { selectorMarkup } from './content-ui';
-import { createHost, extensionUiCapturePlugin, isExtensionUi, registerHostCleanup, removeExtensionUi, removeHost } from './ui-host';
+import { createHost, extensionUiCapturePlugin, isExtensionUi, registerHostCleanup, removeExtensionUi, removeHost, showHostNotice } from './ui-host';
 import {
   historyToastAction,
   setPageZoom,
@@ -40,10 +40,26 @@ if (window.__domShotProtocol !== CONTENT_SCRIPT_PROTOCOL) {
 }
 
 let currentSession: ViewfinderSession | null = null;
-const pendingCaptureRetries = new Map<string, CaptureRetry & { expires: number }>();
+let activeCapture: AbortController | null = null;
+const pendingCaptureRetries = new Map<string, CaptureRetry & { expires: number; previousHistory?: CaptureHistorySession }>();
 
-function registerCaptureRetry(token: string, retry: CaptureRetry) {
-  pendingCaptureRetries.set(token, { ...retry, expires: Date.now() + 10 * 60 * 1000 });
+function registerCaptureRetry(token: string, retry: CaptureRetry, previousHistory?: CaptureHistorySession) {
+  pendingCaptureRetries.set(token, { ...retry, expires: Date.now() + 10 * 60 * 1000, previousHistory });
+}
+
+function rejectBusy(locale: UiLocale) {
+  showHostNotice(t(locale, 'captureBusy'));
+  return { started: false } as const;
+}
+
+function startCapture(request: CaptureRequest, settings: CaptureSettings, label: string, locale: UiLocale, theme: UiTheme, previousHistory?: CaptureHistorySession) {
+  if (activeCapture || currentSession) return false;
+  const controller = new AbortController();
+  activeCapture = controller;
+  void captureElement(request, settings, label, locale, theme, controller.signal, previousHistory).finally(() => {
+    if (activeCapture === controller) activeCapture = null;
+  });
+  return true;
 }
 
 function installMessageListener() {
@@ -55,14 +71,19 @@ function installMessageListener() {
 
     if (message.type === 'DOMSHOT_ZOOM_CHANGED') {
       setPageZoom(message.pageZoom);
+      currentSession?.setPageZoom(message.pageZoom);
       sendResponse({ updated: true });
       return;
     }
 
     if (message.type === 'DOMSHOT_SELECT') {
       setPageZoom(message.pageZoom);
-      currentSession?.destroy();
-      currentSession = new ViewfinderSession({ ...DEFAULT_SETTINGS, ...message.settings }, message.locale ?? resolveLocale('auto'), message.theme ?? resolveTheme('auto'));
+      const locale = message.locale ?? resolveLocale('auto');
+      if (activeCapture || currentSession) {
+        sendResponse(rejectBusy(locale));
+        return;
+      }
+      currentSession = new ViewfinderSession({ ...DEFAULT_SETTINGS, ...message.settings }, locale, message.theme ?? resolveTheme('auto'), message.pageZoom);
       currentSession.start();
       sendResponse({ started: true });
       return;
@@ -70,41 +91,45 @@ function installMessageListener() {
 
     if (message.type === 'DOMSHOT_FULL_PAGE') {
       setPageZoom(message.pageZoom);
-      currentSession?.destroy();
-      currentSession = null;
       const locale = message.locale ?? resolveLocale('auto');
       const theme = message.theme ?? resolveTheme('auto');
-      void captureElement({ kind: 'page', document }, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale, theme);
-      sendResponse({ started: true });
+      const started = startCapture({ kind: 'page', document }, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'fullPage'), locale, theme);
+      sendResponse(started ? { started: true } : rejectBusy(locale));
       return;
     }
 
     if (message.type === 'DOMSHOT_VISIBLE_AREA') {
       setPageZoom(message.pageZoom);
-      currentSession?.destroy();
-      currentSession = null;
       const locale = message.locale ?? resolveLocale('auto');
       const theme = message.theme ?? resolveTheme('auto');
-      void captureElement({ kind: 'viewport', document }, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'visibleArea'), locale, theme);
-      sendResponse({ started: true });
+      const started = startCapture({ kind: 'viewport', document }, { ...DEFAULT_SETTINGS, ...message.settings }, t(locale, 'visibleArea'), locale, theme);
+      sendResponse(started ? { started: true } : rejectBusy(locale));
       return;
     }
 
     if (message.type === 'DOMSHOT_RETRY_CAPTURE') {
       const retry = pendingCaptureRetries.get(message.token);
-      pendingCaptureRetries.delete(message.token);
-      if (!retry || retry.expires < Date.now() || !captureTarget(retry.request).isConnected) {
-        sendResponse({ started: false });
+      if (!retry || retry.expires < Date.now()) {
+        pendingCaptureRetries.delete(message.token);
+        sendResponse({ started: false, reason: 'expired' });
         return;
       }
-      void captureElement(retry.request, retry.settings, retry.label, retry.locale, retry.theme);
-      sendResponse({ started: true });
+      if (!captureTarget(retry.request).isConnected) {
+        pendingCaptureRetries.delete(message.token);
+        sendResponse({ started: false, reason: 'disconnected' });
+        return;
+      }
+      const started = startCapture(retry.request, retry.settings, retry.label, retry.locale, retry.theme, retry.previousHistory);
+      if (started) pendingCaptureRetries.delete(message.token);
+      sendResponse(started ? { started: true } : { ...rejectBusy(retry.locale), reason: 'busy' });
     }
   };
   chrome.runtime.onMessage.addListener(listener);
   return () => {
     chrome.runtime.onMessage.removeListener(listener);
     currentSession?.destroy();
+    activeCapture?.abort();
+    activeCapture = null;
     removeExtensionUi();
     pendingCaptureRetries.clear();
   };
@@ -118,8 +143,11 @@ class ViewfinderSession {
   private toolbar: HTMLElement;
   private hovered: Element | null = null;
   private active = false;
+  private captureTimer: number | null = null;
+  private pageZoom: number;
 
-  constructor(private settings: CaptureSettings, private locale: UiLocale, private theme: UiTheme) {
+  constructor(private settings: CaptureSettings, private locale: UiLocale, private theme: UiTheme, pageZoom: number) {
+    this.pageZoom = pageZoom;
     this.host = createHost('selector', theme);
     this.shadow = this.host.shadowRoot!;
     this.shadow.innerHTML = selectorMarkup(this.locale);
@@ -137,6 +165,9 @@ class ViewfinderSession {
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('scroll', this.onViewportChange, true);
     window.addEventListener('resize', this.onViewportChange);
+    window.visualViewport?.addEventListener('resize', this.onViewportChange);
+    window.visualViewport?.addEventListener('scroll', this.onViewportChange);
+    this.syncViewport();
   }
 
   destroy() {
@@ -151,6 +182,10 @@ class ViewfinderSession {
     document.removeEventListener('keydown', this.onKeyDown, true);
     document.removeEventListener('scroll', this.onViewportChange, true);
     window.removeEventListener('resize', this.onViewportChange);
+    window.visualViewport?.removeEventListener('resize', this.onViewportChange);
+    window.visualViewport?.removeEventListener('scroll', this.onViewportChange);
+    if (this.captureTimer !== null) window.clearTimeout(this.captureTimer);
+    this.captureTimer = null;
     if (currentSession === this) currentSession = null;
   }
 
@@ -162,7 +197,25 @@ class ViewfinderSession {
     this.updateOutline();
   };
 
-  private onViewportChange = () => this.updateOutline();
+  setPageZoom(pageZoom: number) {
+    this.pageZoom = pageZoom;
+    this.syncViewport();
+  }
+
+  private onViewportChange = () => {
+    this.syncViewport();
+    this.updateOutline();
+  };
+
+  private syncViewport() {
+    const viewport = window.visualViewport;
+    const pageZoom = Number.isFinite(this.pageZoom) && this.pageZoom > 0 ? this.pageZoom : 1;
+    const visualScale = viewport && Number.isFinite(viewport.scale) && viewport.scale > 0 ? viewport.scale : 1;
+    const scale = 1 / (pageZoom * visualScale);
+    const left = (viewport?.offsetLeft ?? 0) + (viewport?.width ?? window.innerWidth) / 2;
+    const top = (viewport?.offsetTop ?? 0) + 18 * scale;
+    Object.assign(this.toolbar.style, { left: `${left}px`, top: `${top}px`, transform: `translateX(-50%) scale(${scale})`, transformOrigin: 'top center' });
+  }
 
   private updateOutline() {
     if (!this.hovered || !this.hovered.isConnected) return;
@@ -181,22 +234,25 @@ class ViewfinderSession {
 
     const labelTop = rect.top > 38 ? rect.top - 30 : Math.min(window.innerHeight - 30, rect.bottom + 6);
     Object.assign(this.label.style, {
-      transform: `translate(${Math.max(8, Math.min(rect.left, window.innerWidth - 300))}px, ${Math.max(6, labelTop)}px)`,
+      transform: `translate(${Math.max(8, Math.min(rect.left, window.innerWidth - 300))}px, ${Math.max(6, labelTop)}px) scale(${1 / ((this.pageZoom > 0 ? this.pageZoom : 1) * (window.visualViewport?.scale || 1))})`,
+      transformOrigin: 'top left',
       display: 'block',
     });
   }
 
   private onClick = (event: MouseEvent) => {
+    if (event.composedPath().some((node) => node instanceof Element && isExtensionUi(node))) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const target = this.hovered;
-    if (!target) return;
+    if (!target || this.captureTimer !== null) return;
     const label = describeElement(target);
     this.toolbar.innerHTML = `<span class="spinner"></span><strong>${t(this.locale, 'generatingImage')}</strong><small>${t(this.locale, 'embeddingResources')}</small>`;
     this.outline.classList.add('capturing');
-    window.setTimeout(async () => {
+    this.captureTimer = window.setTimeout(() => {
+      this.captureTimer = null;
       this.destroy();
-      await captureElement({ kind: 'element', element: target }, this.settings, label, this.locale, this.theme);
+      startCapture({ kind: 'element', element: target }, this.settings, label, this.locale, this.theme);
     }, 120);
   };
 
@@ -208,28 +264,53 @@ class ViewfinderSession {
   };
 }
 
-async function captureElement(request: CaptureRequest, settings: CaptureSettings, label: string, locale: UiLocale, theme: UiTheme) {
+async function captureElement(request: CaptureRequest, settings: CaptureSettings, label: string, locale: UiLocale, theme: UiTheme, signal: AbortSignal, previousHistory?: CaptureHistorySession): Promise<void> {
   const target = captureTarget(request);
   const progress = showProgress(label, locale, theme);
   const imageResources = trackImageResources();
+  const cancel = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    if (signal.aborted) return;
+    activeCapture?.abort();
+    removeHost(progress);
+    showToast(t(locale, 'captureCanceled'), theme);
+  };
+  document.addEventListener('keydown', cancel, true);
+  let committed = false;
+  const commit = () => {
+    signal.throwIfAborted();
+    if (committed) return;
+    committed = true;
+    document.removeEventListener('keydown', cancel, true);
+  };
   try {
-    if (settings.captureDelay > 0) await new Promise((resolve) => window.setTimeout(resolve, settings.captureDelay));
+    if (settings.captureDelay > 0) await abortableDelay(settings.captureDelay, signal);
+    signal.throwIfAborted();
     const result = await renderCapture(request, settings, [extensionUiCapturePlugin(), imageResources.plugin]);
-
+    signal.throwIfAborted();
     const image = await exportImage(result, settings.format, settings.quality);
-    const blob = await imageToBlob(image, settings.format, locale);
+    signal.throwIfAborted();
+    const blob = await imageToBlob(image, settings.format, settings.quality, locale);
+    signal.throwIfAborted();
     const resourceReport = imageResources.report();
     const filename = captureFilename(settings.filenameMode, label, settings.format, target === document.documentElement);
-    removeHost(progress);
     const asset: CaptureResultAsset = { blob, format: settings.format, filename };
     const historySession = new CaptureHistorySession({
       createdAt: Date.now(), label, filename, format: settings.format,
       width: image.naturalWidth, height: image.naturalHeight, scale: settings.scale, size: blob.size,
       sourceHost: location.hostname, thumbnailDataUrl: createHistoryThumbnail(image), blob,
     });
+    let historyMessage: string | undefined;
     if (settings.saveRecentCaptures) {
+      commit();
       await historySession.save().catch(() => {
-        // History is optional; a storage failure must not discard a successful capture.
+        historyMessage = t(locale, 'historyAutoSaveFailed');
+      });
+    }
+    if (previousHistory?.saved && historySession.saved) {
+      await previousHistory.remove().catch(() => {
+        historyMessage = `${t(locale, 'savedToRecent')} · ${t(locale, 'historyActionFailed')}`;
       });
     }
     const previewOptions = {
@@ -245,35 +326,66 @@ async function captureElement(request: CaptureRequest, settings: CaptureSettings
       filename,
       historySession,
       retry: { request, settings, label, locale, theme },
-      registerRetry: registerCaptureRetry,
+      registerRetry: (token: string, retry: CaptureRetry) => registerCaptureRetry(token, retry, historySession),
       cancelRetry: (token: string) => pendingCaptureRetries.delete(token),
+      initialHistoryMessage: historyMessage,
     };
     if (resourceReport.failedCount > 0 || settings.afterCapture === 'preview') {
+      commit();
+      removeHost(progress);
       showPreview(previewOptions);
     } else if (settings.afterCapture === 'copy') {
+      commit();
       try {
         const announcement = await copyCaptureResult(asset, locale);
-        showToast(announcement, theme, historyToastAction(historySession, locale));
+        removeHost(progress);
+        showToast(historyMessage ? `${announcement} · ${historyMessage}` : announcement, theme, historyToastAction(historySession, locale));
       } catch {
+        removeHost(progress);
         showPreview({ ...previewOptions, initialCopyFailure: true });
       }
     } else {
+      commit();
       downloadCaptureResult(asset);
-      showToast(t(locale, 'downloadStarted'), theme, historyToastAction(historySession, locale));
+      removeHost(progress);
+      const downloadMessage = t(locale, 'downloadStarted');
+      showToast(historyMessage ? `${downloadMessage} · ${historyMessage}` : downloadMessage, theme, historyToastAction(historySession, locale));
     }
   } catch (error) {
     removeHost(progress);
-    showError(error instanceof Error ? error.message : t(locale, 'pageResourceFailed'), locale, theme);
+    if (!signal.aborted) showError(error instanceof Error ? error.message : t(locale, 'pageResourceFailed'), locale, theme);
+  } finally {
+    document.removeEventListener('keydown', cancel, true);
   }
 }
 
+function abortableDelay(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(done, milliseconds);
+    signal.addEventListener('abort', aborted, { once: true });
+    function done() {
+      signal.removeEventListener('abort', aborted);
+      resolve();
+    }
+    function aborted() {
+      window.clearTimeout(timer);
+      reject(signal.reason ?? new DOMException('Capture canceled', 'AbortError'));
+    }
+  });
+}
+
 function createHistoryThumbnail(image: HTMLImageElement): string {
-  const ratio = Math.min(280 / image.naturalWidth, 180 / image.naturalHeight, 1);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
-  canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
-  canvas.getContext('2d')!.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas.toDataURL('image/webp', .76);
+  try {
+    if (!(image.naturalWidth > 0 && image.naturalHeight > 0)) return '';
+    const ratio = Math.min(280 / image.naturalWidth, 180 / image.naturalHeight, 1);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * ratio));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * ratio));
+    const context = canvas.getContext('2d');
+    if (!context) return '';
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/webp', .76);
+  } catch { return ''; }
 }
 
 
@@ -285,7 +397,7 @@ async function exportImage(result: SnapResult, format: CaptureFormat, quality: n
   return result.toPng();
 }
 
-async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, locale: UiLocale): Promise<Blob> {
+async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, quality: number, locale: UiLocale): Promise<Blob> {
   const response = await fetch(image.src);
   const original = await response.blob();
   const mime = format === 'jpg' ? 'image/jpeg' : `image/${format}`;
@@ -295,7 +407,7 @@ async function imageToBlob(image: HTMLImageElement, format: CaptureFormat, local
   canvas.width = image.naturalWidth;
   canvas.height = image.naturalHeight;
   canvas.getContext('2d')!.drawImage(image, 0, 0);
-  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'imageEncodeFailed'))), mime, .94));
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error(t(locale, 'imageEncodeFailed'))), mime, quality));
 }
 
 
