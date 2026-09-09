@@ -21,6 +21,7 @@ applyDocumentTheme(theme);
 document.documentElement.dataset.mode = inline ? 'inline' : 'window';
 if (inline) cancelButton.textContent = t(locale, 'backCapture');
 let patterns: string[] = [];
+let accessGranted = false;
 
 void loadRequest();
 
@@ -32,6 +33,9 @@ async function loadRequest() {
       return;
     }
     patterns = response.patterns;
+    if (typeof chrome.permissions.contains === 'function') {
+      accessGranted = await chrome.permissions.contains({ origins: patterns }).catch(() => false);
+    }
     originCount.textContent = plural(locale, 'originCountOne', 'originCountMany', response.origins.length);
     originList.replaceChildren(...response.origins.map(originItem));
     grantButton.disabled = false;
@@ -47,8 +51,12 @@ grantButton.addEventListener('click', async () => {
   grantButton.textContent = t(locale, 'waitingBrowser');
   status.textContent = '';
   try {
-    const granted = await chrome.permissions.request({ origins: patterns });
+    const grantedNow = typeof chrome.permissions.contains === 'function'
+      ? await chrome.permissions.contains({ origins: patterns }).catch(() => false)
+      : accessGranted;
+    const granted = grantedNow || await chrome.permissions.request({ origins: patterns });
     if (!granted) {
+      accessGranted = false;
       status.textContent = t(locale, 'permissionDeclined');
       status.className = 'permission-status is-declined';
       grantButton.textContent = t(locale, 'retryPermission');
@@ -56,12 +64,39 @@ grantButton.addEventListener('click', async () => {
       cancelButton.disabled = false;
       return;
     }
+    accessGranted = true;
     const result = await sendExtensionMessage({ type: 'DOMSHOT_COMPLETE_IMAGE_PERMISSION', token });
+    if (!result?.ok) {
+      accessGranted = false;
+      throw new Error(t(locale, 'permissionIncomplete'));
+    }
+    if (result.retryPending && result.reason === 'busy') {
+      status.textContent = t(locale, 'permissionRetryBusy');
+      status.className = 'permission-status is-declined';
+      grantButton.textContent = t(locale, 'retryCapture');
+      grantButton.disabled = false;
+      cancelButton.disabled = false;
+      return;
+    }
+    if (result.reason === 'expired') {
+      cancelButton.disabled = false;
+      showUnavailable(t(locale, 'requestExpired'));
+      return;
+    }
+    if (result.reason === 'disconnected') {
+      status.textContent = t(locale, 'authorizedNavigated');
+      status.className = 'permission-status is-declined';
+      grantButton.textContent = t(locale, 'authorized');
+      cancelButton.disabled = false;
+      if (inline) window.parent.postMessage({ type: 'DOMSHOT_PERMISSION_CANCEL' }, '*');
+      return;
+    }
     status.textContent = t(locale, result?.retried ? 'authorizedRetrying' : 'authorizedNavigated');
     status.className = result?.retried ? 'permission-status is-success' : 'permission-status is-declined';
     grantButton.textContent = t(locale, result?.retried ? 'recapturing' : 'authorized');
     if (result?.retried && !inline) window.setTimeout(() => window.close(), 900);
   } catch {
+    accessGranted = false;
     status.textContent = t(locale, 'permissionIncomplete');
     status.className = 'permission-status is-declined';
     grantButton.textContent = t(locale, 'retryPermission');
