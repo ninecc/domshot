@@ -13,6 +13,7 @@ DOMShot is a Chrome Manifest V3 extension for capturing individual DOM elements 
 - Capture one element or the complete page DOM.
 - Export PNG, JPG, or WebP at 1×, 2×, or 3× scale.
 - Preview, copy, and download images without leaving the page.
+- Copy always writes PNG data to the clipboard; downloads keep the selected PNG, JPG, or WebP format.
 - Optionally keep recent captures locally for previewing, copying, downloading, or deleting; individual deletions can be undone briefly, saving is off by default, and older captures are removed when the history budget is reached.
 - Save or remove an individual capture from its preview or post-copy/download notice without changing the global history preference; when history is turned off, choose whether to keep or delete existing captures.
 - Keep extension UI stable across browser page zoom and pinch zoom.
@@ -93,7 +94,9 @@ Repository maintainers must create the `changelog: skip` label, allow GitHub Act
 - Full-page captures preserve the current viewport layout and include document overflow; nested scroll containers retain their visible contents. Fixed and sticky elements appear once at their current positions. Captures do not automatically scroll to load additional content.
 
 - Protected pages such as `chrome://` pages and extension stores do not allow script injection.
-- Cross-origin images and fonts without suitable CORS headers may not be embedded.
+- A capture appears in Recent Captures only after its local history transfer commits. If Chrome stops the extension worker while the source preview remains open, save it again from that preview. If the source tab closes before the commit, that capture does not enter history.
+- Full-page capture covers the top-level document; it does not expand or traverse documents inside iframes.
+- Cross-origin images and fonts without suitable CORS headers may not be embedded. Optional access and retry applies to blocked HTTP(S) image elements and CSS backgrounds reported by the capture, not fonts, masks, border images, or iframe contents.
 - Very large pages are limited by browser memory and maximum Canvas dimensions.
 - Video, Canvas, WebGL, animations, and highly dynamic content may differ from the visible page.
 
