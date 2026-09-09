@@ -14,7 +14,10 @@ test('content preview remains stable across script updates and zoom changes', as
     await context.test('replaces a stale injected content script', async () => {
       await page.evaluate(`
         window.__domShotLoaded = true;
+        window.__domShotProtocol = 14;
+        window.__domShotCleanup = () => { globalThis.__domshotStaleCleanupRan = true; };
         globalThis.__domshotRevokedObjectUrls = [];
+        globalThis.__domshotStoredCaptureIds = new Set();
         const revokeObjectUrl = URL.revokeObjectURL.bind(URL);
         URL.revokeObjectURL = (url) => {
           globalThis.__domshotRevokedObjectUrls.push(url);
@@ -28,13 +31,20 @@ test('content preview remains stable across script updates and zoom changes', as
           async sendMessage(message) {
             globalThis.__domshotHistoryMessages ??= [];
             if (message.type.startsWith('DOMSHOT_HISTORY_')) {
-              globalThis.__domshotHistoryMessages.push({ type: message.type, index: message.index, dataLength: message.data?.length });
-              return { ok: true };
+              globalThis.__domshotHistoryMessages.push({ type: message.type, id: message.id, captureId: message.capture?.id, thumbnailDataUrl: message.capture?.thumbnailDataUrl, index: message.index, dataLength: message.data?.length });
+              if (message.type === 'DOMSHOT_HISTORY_CONFIRM') return { state: globalThis.__domshotStoredCaptureIds.has(message.capture.id) ? 'stored' : 'missing' };
+              if (message.type === 'DOMSHOT_HISTORY_BEGIN' && globalThis.__domshotFailHistory) return { ok: false };
+              if (message.type === 'DOMSHOT_HISTORY_BEGIN') return { ok: true, uploadToken: 'upload-token' };
+              if (message.type === 'DOMSHOT_HISTORY_COMMIT') globalThis.__domshotStoredCaptureIds.add(message.id);
+              if (message.type === 'DOMSHOT_HISTORY_DELETE') globalThis.__domshotStoredCaptureIds.delete(message.id);
+              if (message.type === 'DOMSHOT_HISTORY_RESTORE') globalThis.__domshotStoredCaptureIds.add(message.id);
+              return { ok: !globalThis.__domshotFailHistory };
             }
           }
         }`);
       await page.evaluate(contentBundle);
       assert.equal(await page.evaluate('typeof globalThis.__domshotListener'), 'function');
+      assert.equal(await page.evaluate('globalThis.__domshotStaleCleanupRan'), true);
     });
 
     await context.test('renders capture controls in the requested language', async () => {
@@ -122,6 +132,37 @@ test('content preview remains stable across script updates and zoom changes', as
       assert.ok(historyMessages.filter((message) => message.dataLength).every((message) => message.dataLength < 2 * 1024 * 1024));
     });
 
+    await context.test('keeps the capture usable when thumbnail generation or automatic history saving fails', async () => {
+      await page.evaluate(`(() => {
+        globalThis.__domshotHistoryMessages = [];
+        globalThis.__domshotFailThumbnail = true;
+        const original = HTMLCanvasElement.prototype.toDataURL;
+        HTMLCanvasElement.prototype.toDataURL = function (type, ...args) {
+          if (globalThis.__domshotFailThumbnail && type === 'image/webp') throw new Error('thumbnail unavailable');
+          return original.call(this, type, ...args);
+        };
+      })()`);
+      await requestVisibleArea(page, { saveRecentCaptures: true });
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Thumbnail failure discarded the completed capture');
+      assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.image-stage img').naturalWidth > 0`), true);
+      assert.equal(await page.evaluate(`globalThis.__domshotHistoryMessages.find(message => message.type === 'DOMSHOT_HISTORY_BEGIN').thumbnailDataUrl`), '');
+
+      await page.evaluate(`globalThis.__domshotFailThumbnail = false; globalThis.__domshotFailHistory = true; globalThis.__domshotHistoryMessages = []`);
+      await requestVisibleArea(page, { saveRecentCaptures: true }, 'en');
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'History failure discarded the completed capture');
+      const failure = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        return { imageReady: shadow.querySelector('.image-stage img').naturalWidth > 0, status: shadow.querySelector('.history-retention-status').textContent };
+      })()`);
+      assert.equal(failure.imageReady, true);
+      assert.match(failure.status, /couldn.t be saved to history/i);
+
+      await requestVisibleArea(page, { saveRecentCaptures: true, afterCapture: 'download' }, 'en');
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'toast'`, 'Automatic action did not report the history failure');
+      assert.match(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.textContent`), /couldn.t be saved to history/i);
+      await page.evaluate(`globalThis.__domshotFailHistory = false`);
+    });
+
     await context.test('lets the current preview remove and restore its history entry', async () => {
       await requestFullPage(page, { saveRecentCaptures: true }, 'zh-CN');
       await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Preview did not appear');
@@ -146,7 +187,7 @@ test('content preview remains stable across script updates and zoom changes', as
       })()`), true, 'removing a capture from history must not disable copy or download');
 
       await page.evaluate(`globalThis.__domshotHistoryMessages = []; document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-toggle').click()`);
-      await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_COMMIT')`, 'Current capture was not restored to history');
+      await page.waitUntil(`globalThis.__domshotHistoryMessages.some((message) => message.type === 'DOMSHOT_HISTORY_RESTORE' || message.type === 'DOMSHOT_HISTORY_COMMIT')`, 'Current capture was not restored to history');
       assert.equal(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-status').textContent`), '✓ 已保存到截图历史');
     });
 
@@ -191,6 +232,26 @@ test('content preview remains stable across script updates and zoom changes', as
       await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Maximum-quality JPG preview did not appear');
       const maximumQualitySize = await page.evaluate(`fetch(document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.image-stage img').src).then((response) => response.blob()).then((blob) => blob.size)`);
       assert.ok(maximumQualitySize >= lowQualitySize, `maximum-quality JPG (${maximumQualitySize}) was smaller than 80% JPG (${lowQualitySize})`);
+
+      await page.evaluate(`(() => {
+        globalThis.__domshotBlobQualities = [];
+        globalThis.__domshotForceMimeFallback = true;
+        const originalFetch = globalThis.fetch.bind(globalThis);
+        globalThis.fetch = async (input, init) => {
+          const response = await originalFetch(input, init);
+          if (!globalThis.__domshotForceMimeFallback || typeof input !== 'string' || !input.startsWith('data:image/jpeg')) return response;
+          return new Response(await response.arrayBuffer(), { headers: { 'content-type': 'application/octet-stream' } });
+        };
+        const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+        HTMLCanvasElement.prototype.toBlob = function (callback, type, quality) {
+          if (globalThis.__domshotForceMimeFallback && type === 'image/jpeg') globalThis.__domshotBlobQualities.push(quality);
+          return originalToBlob.call(this, callback, type, quality);
+        };
+      })()`);
+      await requestFullPage(page, { format: 'jpg', quality: 0.8 });
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Fallback-encoded JPG preview did not appear');
+      assert.equal(await page.evaluate(`globalThis.__domshotBlobQualities.at(-1)`), 0.8, 'MIME fallback must preserve the selected image quality');
+      await page.evaluate(`globalThis.__domshotForceMimeFallback = false`);
 
       const startedAt = Date.now();
       await requestFullPage(page, { captureDelay: 500 });
@@ -387,6 +448,7 @@ test('selected element reports cross-origin images that could not be embedded', 
       await page.evaluate(`
         globalThis.__domshotProxyEnabled = false;
         globalThis.__domshotPermissionRequest = null;
+        globalThis.__domshotHistoryMessages = [];
         HTMLAnchorElement.prototype.click = function () { globalThis.__domshotDownload = this.download; };
         chrome.runtime = {
           onMessage: {
@@ -394,11 +456,25 @@ test('selected element reports cross-origin images that could not be embedded', 
             removeListener() {}
           },
           async sendMessage(message) {
+            if (message.type.startsWith('DOMSHOT_HISTORY_')) {
+              globalThis.__domshotHistoryMessages.push({ type: message.type, id: message.id, captureId: message.capture?.id });
+              if (message.type === 'DOMSHOT_HISTORY_BEGIN' && globalThis.__domshotFailNextHistoryBegin) {
+                globalThis.__domshotFailNextHistoryBegin = false;
+                return { ok: false };
+              }
+              if (message.type === 'DOMSHOT_HISTORY_BEGIN') return { ok: true, uploadToken: 'upload-token' };
+              if (message.type === 'DOMSHOT_HISTORY_DELETE' && globalThis.__domshotFailNextHistoryDelete) {
+                globalThis.__domshotFailNextHistoryDelete = false;
+                return { ok: false };
+              }
+              return { ok: true };
+            }
             if (message.type === 'DOMSHOT_RESOLVE_IMAGES') {
+              globalThis.__domshotResolveUrls = message.urls;
               return {
                 resources: message.urls.map((url) => globalThis.__domshotProxyEnabled
                   ? { url, dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==' }
-                  : { url, reason: 'permission' })
+                  : { url, reason: 'permission', permissionUrl: url })
               };
             }
             if (message.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION') {
@@ -410,7 +486,7 @@ test('selected element reports cross-origin images that could not be embedded', 
       await page.evaluate(contentBundle);
       await page.evaluate(`globalThis.__domshotListener({
         type: 'DOMSHOT_SELECT',
-        settings: { format: 'png', scale: 1, afterCapture: 'download', embedFonts: false, reconcile: false, outerShadows: false, compress: true },
+        settings: { format: 'png', scale: 1, afterCapture: 'download', saveRecentCaptures: true, embedFonts: false, reconcile: false, outerShadows: false, compress: true },
         locale: 'zh-CN',
         theme: 'light',
         pageZoom: 1
@@ -436,11 +512,12 @@ test('selected element reports cross-origin images that could not be embedded', 
       assert.ok(warning.title.length > 0);
       assert.match(warning.title, /[\u4e00-\u9fff]/, 'Chinese capture UI should contain Chinese copy');
       assert.match(warning.message, /1/);
-      assert.equal(warning.canGrant, true);
+      assert.equal(warning.canGrant, true, JSON.stringify({ warning, urls: await page.evaluate(`globalThis.__domshotResolveUrls`) }));
 
       await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.grant-images').click()`);
       await page.waitUntil(`globalThis.__domshotPermissionRequest?.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION'`, 'Permission request was not prepared');
       assert.equal(await page.evaluate(`globalThis.__domshotPermissionRequest.theme`), 'light');
+      assert.deepEqual(await page.evaluate(`globalThis.__domshotPermissionRequest.origins`), [`http://127.0.0.1:${imagePort}`]);
       await page.waitUntil(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.preview-card').classList.contains('is-authorizing')`, 'Preview card did not enter its inline permission state');
       const authorizationState = await page.evaluate(`(() => {
         const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
@@ -456,6 +533,20 @@ test('selected element reports cross-origin images that could not be embedded', 
       assert.equal(authorizationState.frameVisible, true);
       assert.equal(authorizationState.previewVisible, false);
       assert.equal(authorizationState.containsDomain, false, 'Result card should leave the domain list to the permission view');
+      const restoredAfterDisconnect = await page.evaluate(`(() => {
+        const shadow = document.querySelector('#domshot-extension-root').shadowRoot;
+        const frame = shadow.querySelector('.permission-panel iframe');
+        window.dispatchEvent(new MessageEvent('message', {
+          data: { type: 'DOMSHOT_PERMISSION_CANCEL' },
+          source: frame.contentWindow
+        }));
+        return {
+          frameHidden: shadow.querySelector('.permission-panel').hidden,
+          previewVisible: getComputedStyle(shadow.querySelector('.image-stage')).display !== 'none',
+          canAuthorize: !shadow.querySelector('.grant-images').disabled,
+        };
+      })()`);
+      assert.deepEqual(restoredAfterDisconnect, { frameHidden: true, previewVisible: true, canAuthorize: true });
       const retried = await page.evaluate(`(() => {
         globalThis.__domshotProxyEnabled = true;
         let response;
@@ -468,6 +559,69 @@ test('selected element reports cross-origin images that could not be embedded', 
         return host?.dataset.domshotUi === 'toast' && Boolean(globalThis.__domshotDownload);
       })()`, 'Retried capture did not resolve the image and run the configured download');
       assert.match(await page.evaluate(`globalThis.__domshotDownload`), /^domshot-.+\.png$/);
+      await page.waitUntil(`globalThis.__domshotHistoryMessages.some(message => message.type === 'DOMSHOT_HISTORY_DELETE')`, 'Successful retry left the failed capture in history');
+      const history = await page.evaluate(`globalThis.__domshotHistoryMessages`);
+      const captureIds = history.filter(message => message.type === 'DOMSHOT_HISTORY_BEGIN').map(message => message.captureId);
+      assert.equal(captureIds.length, 2);
+      assert.notEqual(captureIds[0], captureIds[1]);
+      assert.equal(history.find(message => message.type === 'DOMSHOT_HISTORY_DELETE').id, captureIds[0]);
+
+      await page.evaluate(`(() => {
+        globalThis.__domshotProxyEnabled = false;
+        globalThis.__domshotPermissionRequest = null;
+        globalThis.__domshotHistoryMessages = [];
+        globalThis.__domshotListener({
+          type: 'DOMSHOT_SELECT',
+          settings: { format: 'png', scale: 1, afterCapture: 'preview', saveRecentCaptures: true, embedFonts: false, reconcile: false, outerShadows: false, compress: true },
+          locale: 'en', theme: 'light', pageZoom: 1
+        }, {}, () => {});
+        const rect = document.querySelector('#target').getBoundingClientRect();
+        const init = { bubbles: true, clientX: rect.right - 20, clientY: rect.bottom - 20 };
+        document.dispatchEvent(new MouseEvent('mousemove', init));
+        document.dispatchEvent(new MouseEvent('click', init));
+      })()`);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Second partial preview did not appear');
+      const retainedPartialId = await page.evaluate(`globalThis.__domshotHistoryMessages.find(message => message.type === 'DOMSHOT_HISTORY_BEGIN').captureId`);
+      await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.grant-images').click()`);
+      await page.waitUntil(`globalThis.__domshotPermissionRequest?.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION'`, 'Second permission request was not prepared');
+      await page.evaluate(`(() => {
+        globalThis.__domshotProxyEnabled = true;
+        globalThis.__domshotFailNextHistoryBegin = true;
+        globalThis.__domshotListener({ type: 'DOMSHOT_RETRY_CAPTURE', token: globalThis.__domshotPermissionRequest.token }, {}, () => {});
+      })()`);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Retry with failed automatic save did not return a preview');
+      const failedReplacement = await page.evaluate(`(() => ({
+        status: document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-status').textContent,
+        deletes: globalThis.__domshotHistoryMessages.filter(message => message.type === 'DOMSHOT_HISTORY_DELETE').map(message => message.id)
+      }))()`);
+      assert.match(failedReplacement.status, /couldn.t be saved to history/i);
+      assert.deepEqual(failedReplacement.deletes, [], 'A failed replacement save must retain the old partial capture');
+      assert.ok(retainedPartialId);
+
+      await page.evaluate(`(() => {
+        globalThis.__domshotProxyEnabled = false;
+        globalThis.__domshotPermissionRequest = null;
+        globalThis.__domshotHistoryMessages = [];
+        globalThis.__domshotListener({
+          type: 'DOMSHOT_SELECT',
+          settings: { format: 'png', scale: 1, afterCapture: 'preview', saveRecentCaptures: true, embedFonts: false, reconcile: false, outerShadows: false, compress: true },
+          locale: 'en', theme: 'light', pageZoom: 1
+        }, {}, () => {});
+        const rect = document.querySelector('#target').getBoundingClientRect();
+        const init = { bubbles: true, clientX: rect.right - 20, clientY: rect.bottom - 20 };
+        document.dispatchEvent(new MouseEvent('mousemove', init));
+        document.dispatchEvent(new MouseEvent('click', init));
+      })()`);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Third partial preview did not appear');
+      await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.grant-images').click()`);
+      await page.waitUntil(`globalThis.__domshotPermissionRequest?.type === 'DOMSHOT_PREPARE_IMAGE_PERMISSION'`, 'Third permission request was not prepared');
+      await page.evaluate(`(() => {
+        globalThis.__domshotProxyEnabled = true;
+        globalThis.__domshotFailNextHistoryDelete = true;
+        globalThis.__domshotListener({ type: 'DOMSHOT_RETRY_CAPTURE', token: globalThis.__domshotPermissionRequest.token }, {}, () => {});
+      })()`);
+      await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi === 'preview'`, 'Retry with failed cleanup did not return a preview');
+      assert.match(await page.evaluate(`document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.history-retention-status').textContent`), /saved to capture history.*couldn.t complete that action/i);
     });
   } finally {
     await Promise.all([closeServer(pageServer), closeServer(imageServer)]);

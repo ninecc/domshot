@@ -5,11 +5,14 @@ import { withChromePage } from "./support/chrome-page.mjs";
 const bundle = await readFile(new URL("../dist/content.js", import.meta.url), "utf8");
 async function capture(page, mode = "DOMSHOT_FULL_PAGE", scale = 1) {
   await page.evaluate(`globalThis.listener({type:${JSON.stringify(mode)},settings:{format:'png',scale:${scale},embedFonts:false,reconcile:false,compress:false},locale:'en',theme:'light',pageZoom:1},{},()=>{})`);
+  return capturedPixels(page);
+}
+async function capturedPixels(page) {
   await page.waitUntil(`document.querySelector('#domshot-extension-root')?.dataset.domshotUi==='preview'`, "Missing capture");
   return page.evaluate(`(async()=>{const im=document.querySelector('#domshot-extension-root').shadowRoot.querySelector('.image-stage img');await im.decode();const c=document.createElement('canvas');c.width=im.naturalWidth;c.height=im.naturalHeight;const ctx=c.getContext('2d');ctx.drawImage(im,0,0);const d=ctx.getImageData(0,0,c.width,c.height).data;let red=0,green=0,minRed=c.width,transparent=0,minMagentaX=c.width,minMagentaY=c.height;for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++){const i=(y*c.width+x)*4;if(d[i+3]<255)transparent++;if(d[i]===255&&d[i+1]===0&&d[i+2]===255&&d[i+3]===255){minMagentaX=Math.min(minMagentaX,x);minMagentaY=Math.min(minMagentaY,y)}if(d[i]===255&&d[i+1]===0&&d[i+2]===0&&d[i+3]===255){red++;minRed=Math.min(minRed,x)}if(d[i]===0&&d[i+1]===255&&d[i+2]===0)green++}return{width:c.width,height:c.height,red,green,minRed,transparent,minMagentaX,minMagentaY,samples:[10,300,490,950].filter(x=>x<c.width).map(x=>[...d.slice((50*c.width+x)*4,(50*c.width+x)*4+4)])}})()`);
 }
-async function fixture(html, run) {
-  await withChromePage({ url: "data:text/html," + encodeURIComponent("<!doctype html>" + html), viewport: { width: 480, height: 400 } }, async (page) => {
+async function fixture(html, run, standards = true) {
+  await withChromePage({ url: "data:text/html," + encodeURIComponent((standards ? "<!doctype html>" : "") + html), viewport: { width: 480, height: 400 } }, async (page) => {
     await page.evaluate(`chrome.runtime={onMessage:{addListener(l){globalThis.listener=l},removeListener(){}},async sendMessage(){return{ok:true}}}`);
     await page.evaluate(bundle);
     await run(page);
@@ -44,6 +47,17 @@ test("document backgrounds preserve alpha and gradient positioning beyond the vi
     });
   }
 });
+test("document background is sampled at the clone boundary", async () => {
+  await fixture('<style>body{margin:0;background:red}</style><main style="width:480px;height:800px"></main>', async (page) => {
+    await page.evaluate(`(() => {
+      listener({type:'DOMSHOT_FULL_PAGE',settings:{format:'png',scale:1,embedFonts:false,reconcile:false,compress:false},locale:'en',theme:'light',pageZoom:1},{},()=>{});
+      document.body.style.background = 'lime';
+    })()`);
+    const image = await capturedPixels(page);
+    assert.equal(image.red, 0);
+    assert.equal(image.green, image.width * image.height);
+  });
+});
 test("transparent documents stay transparent and explicit root clipping is retained", async () => {
   await fixture("<style>html{overflow:hidden}body{margin:0}</style>" + wide, async (page) => {
     const result = await capture(page);
@@ -59,6 +73,26 @@ test("a separately scrolling body remains a nested scroll container", async () =
   await fixture("<style>html{overflow:auto}body{margin:0;width:240px;height:200px;overflow:auto;background:blue}</style>" + wide, async (page) => {
     const result = await capture(page);
     assert.equal(result.red, 0, "Body contents outside its own scrollport stay clipped");
+  });
+});
+
+test("a body that participates in document scrolling is not frozen as a nested scroller", async () => {
+  await fixture("<style>html{overflow:visible}body{margin:0;height:200px;overflow:auto;background:blue}</style>" + wide, async (page) => {
+    assert.equal(await page.evaluate(`document.scrollingElement === document.body`), true, "Fixture must use body as the document scroller");
+    await page.evaluate(`scrollTo(100, 0)`);
+    await page.nextFrames();
+    const result = await capture(page);
+    assert.equal(result.minRed, 900, "Document-scrolling body content retains document coordinates");
+    assert.equal(result.red, 900, "Document-scrolling body exposes all document content");
+  }, false);
+});
+
+test("full-page capture renders content-visibility auto without scrolling the page", async () => {
+  await fixture(`<style>body{margin:0}.lazy{content-visibility:auto;contain-intrinsic-size:120px;width:120px;height:120px;margin-top:700px}.mark{width:120px;height:120px;background:red}</style><main style="height:900px"><section class="lazy"><div class="mark"></div></section></main>`, async (page) => {
+    await page.evaluate(`globalThis.captureScrollEvents=0;addEventListener('scroll',()=>captureScrollEvents++)`);
+    const result = await capture(page);
+    assert.equal(result.red, 120 * 120, "Off-screen auto content must be rendered in a full-page capture");
+    assert.deepEqual(await page.evaluate(`({x:scrollX,y:scrollY,events:captureScrollEvents})`), { x: 0, y: 0, events: 0 });
   });
 });
 

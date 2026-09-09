@@ -2,6 +2,19 @@
 
 All notable changes to DOMShot are documented in this file.
 
+## [0.2.3] - 2026-09-09
+
+### Changed
+
+- **engine:** Upgrade SnapDOM to 2.24.17 while retaining only the compatibility fixes still required by DOMShot regressions.
+
+### Fixed
+
+- **capture:** Keep concurrent capture UI, zoomed selectors, classic-scrollbar viewports, and delayed download handoff stable.
+- **rendering:** Capture body-scrolled documents and backgrounds correctly, and preserve the matching face for icon-font pseudo-elements.
+- **history:** Make history commits idempotent, keep large lists memory-safe, enforce physical quotas, and preserve captures when optional saves fail.
+- **images:** Resolve permission-blocked image elements and CSS backgrounds, follow redirects, and preserve sprite crops and failed-image layout.
+
 ## [0.2.2] - 2026-09-07
 
 ### Changed

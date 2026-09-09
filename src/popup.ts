@@ -160,13 +160,17 @@ async function loadHistory(showFailure = true) {
     captures = await listCaptureHistory();
     renderHistory();
   } catch (error) {
-    if (showFailure) status.textContent = error instanceof Error ? error.message : t(activeLocale, 'historyLoadFailed');
+    if (showFailure) status.textContent = error instanceof ExtensionReloadRequiredError
+      ? error.message
+      : t(activeLocale, 'historyLoadFailed');
   }
 }
 
+class ExtensionReloadRequiredError extends Error {}
+
 async function ensureBackgroundReady() {
   const response = await sendExtensionMessage({ type: 'DOMSHOT_BACKGROUND_PING' }).catch(() => null);
-  if (response?.protocol !== BACKGROUND_PROTOCOL) throw new Error(t(activeLocale, 'extensionReloadRequired'));
+  if (response?.protocol !== BACKGROUND_PROTOCOL) throw new ExtensionReloadRequiredError(t(activeLocale, 'extensionReloadRequired'));
 }
 
 function renderHistory() {
@@ -370,10 +374,21 @@ function formatHistoryDate(value: number) {
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !tab.url || /^(chrome|edge|about|view-source):/.test(tab.url)) {
+  if (!tab?.id || !tab.url || !isCapturablePage(tab.url)) {
     throw new Error(t(activeLocale, 'protectedPage'));
   }
   return tab;
+}
+
+function isCapturablePage(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (!['http:', 'https:', 'file:'].includes(url.protocol)) return false;
+    return !(url.hostname === 'chromewebstore.google.com'
+      || (url.hostname === 'chrome.google.com' && url.pathname.startsWith('/webstore')));
+  } catch {
+    return false;
+  }
 }
 
 async function ensureContentScript(tabId: number) {
@@ -391,6 +406,7 @@ async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_VISIBLE_AREA' | 'DOMSHOT_
   const button = type === 'DOMSHOT_SELECT' ? selectButton : type === 'DOMSHOT_VISIBLE_AREA' ? visibleButton : pageButton;
   const settings = readSettings();
   button.disabled = true;
+  status.classList.remove('is-error');
   status.textContent = t(activeLocale, type === 'DOMSHOT_SELECT' ? 'openingViewfinder' : type === 'DOMSHOT_VISIBLE_AREA' ? 'preparingVisible' : 'preparingPage');
 
   try {
@@ -399,7 +415,8 @@ async function begin(type: 'DOMSHOT_SELECT' | 'DOMSHOT_VISIBLE_AREA' | 'DOMSHOT_
     const tab = await getActiveTab();
     const pageZoom = await chrome.tabs.getZoom(tab.id!);
     await ensureContentScript(tab.id!);
-    await chrome.tabs.sendMessage(tab.id!, { type, settings, pageZoom, locale: activeLocale, theme: activeTheme } satisfies ExtensionMessage);
+    const response = await chrome.tabs.sendMessage(tab.id!, { type, settings, pageZoom, locale: activeLocale, theme: activeTheme } satisfies ExtensionMessage) as { started?: boolean } | undefined;
+    if (response?.started !== true) throw new Error(t(activeLocale, 'captureBusy'));
     window.close();
   } catch (error) {
     button.disabled = false;

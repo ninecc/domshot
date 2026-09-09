@@ -15,13 +15,15 @@ export function captureGeometry(request: CaptureRequest) {
   const viewport = win.visualViewport;
   const width = Math.max(root.clientWidth, root.scrollWidth, doc.body?.scrollWidth ?? 0);
   const height = Math.max(root.clientHeight, root.scrollHeight, doc.body?.scrollHeight ?? 0);
+  const visualWidth = viewport?.width ?? win.innerWidth;
+  const visualHeight = viewport?.height ?? win.innerHeight;
   return {
     width, height,
     clip: request.kind === 'viewport' ? {
       x: viewport?.pageLeft ?? win.scrollX,
       y: viewport?.pageTop ?? win.scrollY,
-      width: viewport?.width ?? win.innerWidth,
-      height: viewport?.height ?? win.innerHeight,
+      width: Math.min(visualWidth, root.clientWidth || visualWidth),
+      height: Math.min(visualHeight, root.clientHeight || visualHeight),
     } : { x: 0, y: 0, width, height },
   };
 }

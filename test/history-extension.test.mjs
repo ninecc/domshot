@@ -50,6 +50,8 @@ test('a real capture is persisted by the extension service worker', async () => 
       const byteLength = 49 * 1024 * 1024;
       const chunkSize = 3 * 256 * 1024;
       const bytes = new Uint8Array(byteLength);
+      const digestBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+      const digest = 'sha256:' + Array.from(digestBytes, (value) => value.toString(16).padStart(2, '0')).join('');
       const encode = (chunk) => {
         let binary = '';
         for (let offset = 0; offset < chunk.length; offset += 0x8000) binary += String.fromCharCode(...chunk.subarray(offset, offset + 0x8000));
@@ -57,17 +59,17 @@ test('a real capture is persisted by the extension service worker', async () => 
       };
       let error = '';
       try {
-        await chrome.runtime.sendMessage({
-          type: 'DOMSHOT_HISTORY_BEGIN', mimeType: 'image/png', totalChunks: Math.ceil(byteLength / chunkSize),
+        const begin = await chrome.runtime.sendMessage({
+          type: 'DOMSHOT_HISTORY_BEGIN', mimeType: 'image/png', digest, totalChunks: Math.ceil(byteLength / chunkSize),
           capture: {
             id: 'large-capture', createdAt: 2, label: 'Large capture', filename: 'large.png', format: 'png',
             width: 8000, height: 6000, scale: 3, size: byteLength, sourceHost: 'example.com', thumbnailDataUrl: 'data:image/png;base64,AA=='
           }
         });
         for (let offset = 0, index = 0; offset < byteLength; offset += chunkSize, index += 1) {
-          await chrome.runtime.sendMessage({ type: 'DOMSHOT_HISTORY_CHUNK', id: 'large-capture', index, data: encode(bytes.subarray(offset, offset + chunkSize)) });
+          await chrome.runtime.sendMessage({ type: 'DOMSHOT_HISTORY_CHUNK', id: 'large-capture', uploadToken: begin.uploadToken, index, data: encode(bytes.subarray(offset, offset + chunkSize)) });
         }
-        await chrome.runtime.sendMessage({ type: 'DOMSHOT_HISTORY_COMMIT', id: 'large-capture' });
+        await chrome.runtime.sendMessage({ type: 'DOMSHOT_HISTORY_COMMIT', id: 'large-capture', uploadToken: begin.uploadToken });
       } catch (caught) { error = caught?.message || String(caught); }
       const history = await chrome.runtime.sendMessage({ type: 'DOMSHOT_HISTORY_LIST' });
       return { error, count: history.captures.length };

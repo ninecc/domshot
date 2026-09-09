@@ -24,7 +24,7 @@ test('permission page lets a user recover after declining access', async () => {
           };
           if (message.type === 'DOMSHOT_COMPLETE_IMAGE_PERMISSION') {
             globalThis.__permissionCompleted = true;
-            return { retried: true };
+            return { ok: true, retried: true };
           }
           return { ok: true };
         }
@@ -51,6 +51,112 @@ test('permission page lets a user recover after declining access', async () => {
     await page.waitUntil(`globalThis.__permissionCompleted === true`, 'Granted permission did not retry capture');
     assert.ok((await page.evaluate(`document.querySelector('#permissionStatus').textContent`)).length > 0);
     assert.equal(await page.evaluate(`globalThis.__permissionRequests`), 2);
+  });
+});
+
+test('permission page treats a rejected completion as recoverable failure', async () => {
+  await withChromePage({ url: `${fixtureUrl}?token=retry-failed&mode=inline&lang=en` }, async (page) => {
+    await page.evaluate(`
+      globalThis.__completionAttempts = 0;
+      chrome.runtime = {
+        async sendMessage(message) {
+          if (message.type === 'DOMSHOT_GET_IMAGE_PERMISSION') return {
+            ok: true,
+            origins: ['https://cdn.example:8443'],
+            patterns: ['https://cdn.example/*']
+          };
+          if (message.type === 'DOMSHOT_COMPLETE_IMAGE_PERMISSION') {
+            globalThis.__completionAttempts += 1;
+            return globalThis.__completionAttempts === 1
+              ? { ok: false, retried: false }
+              : { ok: true, retried: true };
+          }
+          return { ok: true };
+        }
+      };
+      chrome.permissions = { async request() { return true; } };
+    `);
+    await page.evaluate(permissionBundle);
+    await page.waitUntil(`document.querySelector('#grantPermission').disabled === false`, 'Permission request did not load');
+
+    await page.evaluate(`document.querySelector('#grantPermission').click()`);
+    await page.waitUntil(`globalThis.__completionAttempts === 1`, 'Failed completion was not received');
+    assert.equal(await page.evaluate(`document.querySelector('#grantPermission').disabled`), false);
+    assert.equal(await page.evaluate(`document.querySelector('#cancelPermission').disabled`), false);
+    assert.match(await page.evaluate(`document.querySelector('#permissionStatus').textContent`), /didn.t finish/i);
+
+    await page.evaluate(`document.querySelector('#grantPermission').click()`);
+    await page.waitUntil(`globalThis.__completionAttempts === 2`, 'Completion could not be retried');
+    assert.match(await page.evaluate(`document.querySelector('#permissionStatus').textContent`), /retrying/i);
+  });
+});
+
+test('permission page rechecks access before retrying a busy capture', async () => {
+  await withChromePage({ url: `${fixtureUrl}?token=retry-busy&mode=inline&lang=en` }, async (page) => {
+    await page.evaluate(`
+      globalThis.__permissionRequests = 0;
+      globalThis.__completionAttempts = 0;
+      globalThis.__permissionPresent = false;
+      chrome.runtime = {
+        async sendMessage(message) {
+          if (message.type === 'DOMSHOT_GET_IMAGE_PERMISSION') return {
+            ok: true, origins: ['https://cdn.example'], patterns: ['https://cdn.example/*']
+          };
+          if (message.type === 'DOMSHOT_COMPLETE_IMAGE_PERMISSION') {
+            globalThis.__completionAttempts += 1;
+            return globalThis.__completionAttempts === 1
+              ? { ok: true, retried: false, retryPending: true, reason: 'busy' }
+              : { ok: true, retried: true };
+          }
+          return { ok: true };
+        }
+      };
+      chrome.permissions = {
+        async contains() { return globalThis.__permissionPresent; },
+        async request() { globalThis.__permissionRequests += 1; globalThis.__permissionPresent = true; return true; }
+      };
+    `);
+    await page.evaluate(permissionBundle);
+    await page.waitUntil(`document.querySelector('#grantPermission').disabled === false`, 'Permission request did not load');
+    await page.evaluate(`document.querySelector('#grantPermission').click()`);
+    await page.waitUntil(`globalThis.__completionAttempts === 1`, 'Busy completion was not received');
+    assert.match(await page.evaluate(`document.querySelector('#permissionStatus').textContent`), /still in progress/i);
+    assert.equal(await page.evaluate(`document.querySelector('#grantPermission').disabled`), false);
+
+    await page.evaluate(`globalThis.__permissionPresent = false`);
+    await page.evaluate(`document.querySelector('#grantPermission').click()`);
+    await page.waitUntil(`globalThis.__completionAttempts === 2`, 'Busy completion could not be retried');
+    assert.equal(await page.evaluate(`globalThis.__permissionRequests`), 2, 'externally revoked access must be requested again');
+    assert.match(await page.evaluate(`document.querySelector('#permissionStatus').textContent`), /retrying/i);
+  });
+});
+
+test('inline permission page returns to the partial preview when the source tab disconnects', async () => {
+  await withChromePage({ url: `${fixtureUrl}?token=retry-disconnected&mode=inline&lang=en` }, async (page) => {
+    await page.evaluate(`
+      globalThis.__permissionCancelPosted = false;
+      window.addEventListener('message', event => {
+        if (event.data?.type === 'DOMSHOT_PERMISSION_CANCEL') globalThis.__permissionCancelPosted = true;
+      });
+      chrome.runtime = {
+        async sendMessage(message) {
+          if (message.type === 'DOMSHOT_GET_IMAGE_PERMISSION') return {
+            ok: true, origins: ['https://cdn.example'], patterns: ['https://cdn.example/*']
+          };
+          if (message.type === 'DOMSHOT_COMPLETE_IMAGE_PERMISSION') return {
+            ok: true, retried: false, reason: 'disconnected'
+          };
+          return { ok: true };
+        }
+      };
+      chrome.permissions = { async contains() { return true; }, async request() { return true; } };
+    `);
+    await page.evaluate(permissionBundle);
+    await page.waitUntil(`document.querySelector('#grantPermission').disabled === false`, 'Permission request did not load');
+    await page.evaluate(`document.querySelector('#grantPermission').click()`);
+    await page.waitUntil(`globalThis.__permissionCancelPosted`, 'Inline permission page did not restore its parent preview');
+    assert.equal(await page.evaluate(`document.querySelector('#cancelPermission').disabled`), false);
+    assert.match(await page.evaluate(`document.querySelector('#permissionStatus').textContent`), /closed or navigated/i);
   });
 });
 

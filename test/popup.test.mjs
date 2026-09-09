@@ -27,7 +27,7 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
       }];
       Object.defineProperty(chrome, 'runtime', { configurable: true, value: {
         async sendMessage(message) {
-          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 3 };
+          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 4 };
           if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: globalThis.__historyStore.filter((capture) => !capture.deleted).map(({ dataBase64, deleted, ...capture }) => capture) };
           if (message.type === 'DOMSHOT_HISTORY_GET') {
             const stored = globalThis.__historyStore.find((capture) => capture.id === message.id && !capture.deleted);
@@ -707,6 +707,59 @@ test('popup opens a dedicated settings panel and returns to the capture panel', 
   });
 });
 
+test('capture actions identify extension stores as protected and clear an earlier error before retrying', async () => {
+  await withChromePage({
+    url: popupUrl,
+    viewport: { width: 360, height: 600 },
+    initScript: `
+      globalThis.__tabUrl = 'https://chromewebstore.google.com/detail/example/abcdefghijklmnop';
+      globalThis.__captureMessages = [];
+      globalThis.__captureStarted = false;
+      globalThis.__syncStore = {};
+      Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) });
+      Object.defineProperty(globalThis, 'close', { configurable: true, value: () => { globalThis.__closed = true; } });
+      Object.defineProperty(chrome, 'i18n', { configurable: true, value: { getUILanguage: () => 'en-US' } });
+      Object.defineProperty(chrome, 'runtime', { configurable: true, value: {
+        async sendMessage(message) {
+          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 4 };
+          if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: [] };
+        }
+      } });
+      Object.defineProperty(chrome, 'storage', { configurable: true, value: { sync: {
+        async get(key) { return typeof key === 'string' ? { [key]: globalThis.__syncStore[key] } : { ...globalThis.__syncStore }; },
+        async set(values) { Object.assign(globalThis.__syncStore, values); }
+      } } });
+      Object.defineProperty(chrome, 'tabs', { configurable: true, value: {
+        async query() { return [{ id: 7, url: globalThis.__tabUrl }]; },
+        async getZoom() { return 1; },
+        async sendMessage(_tabId, message) {
+          globalThis.__captureMessages.push(message.type);
+          if (message.type === 'DOMSHOT_PING') return { protocol: 15 };
+          return { started: globalThis.__captureStarted };
+        }
+      } });
+      Object.defineProperty(chrome, 'scripting', { configurable: true, value: { async executeScript() {} } });
+    `,
+  }, async (page) => {
+    await page.waitUntil(`document.documentElement.lang === 'en'`, 'popup localization did not initialize');
+    await page.evaluate(`document.querySelector('#captureVisible').click()`);
+    await page.waitUntil(`document.querySelector('#status').classList.contains('is-error')`, 'protected-page error was not shown');
+    assert.match(await page.evaluate(`document.querySelector('#status').textContent`), /protected by the browser/);
+    assert.deepEqual(await page.evaluate(`globalThis.__captureMessages`), [], 'protected pages must be rejected before messaging the tab');
+
+    await page.evaluate(`globalThis.__tabUrl = 'https://example.com/page'`);
+    await page.evaluate(`document.querySelector('#captureVisible').click()`);
+    await page.waitUntil(`document.querySelector('#status').textContent.includes('already in progress')`, 'busy capture was not reported');
+    assert.equal(await page.evaluate(`globalThis.__closed === true`), false, 'popup must stay open when capture did not start');
+
+    await page.evaluate(`globalThis.__captureStarted = true`);
+    await page.evaluate(`document.querySelector('#captureVisible').click()`);
+    await page.waitUntil(`globalThis.__closed === true`, 'capture did not start on the retry');
+    assert.equal(await page.evaluate(`document.querySelector('#status').classList.contains('is-error')`), false);
+    assert.deepEqual(await page.evaluate(`globalThis.__captureMessages`), ['DOMSHOT_PING', 'DOMSHOT_VISIBLE_AREA', 'DOMSHOT_PING', 'DOMSHOT_VISIBLE_AREA']);
+  });
+});
+
 test('popup rejects a stale background before offering history actions', async () => {
   await withChromePage({
     url: popupUrl,
@@ -717,7 +770,7 @@ test('popup rejects a stale background before offering history actions', async (
       Object.defineProperty(chrome, 'i18n', { configurable: true, value: { getUILanguage: () => 'en-US' } });
       Object.defineProperty(chrome, 'runtime', { configurable: true, value: {
         async sendMessage(message) {
-          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 2 };
+          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 3 };
           if (message.type === 'DOMSHOT_HISTORY_LIST') return { captures: [{
             id: 'legacy-capture', createdAt: 1, label: 'Legacy capture', filename: 'legacy.png', format: 'png',
             width: 100, height: 80, scale: 1, size: 1, sourceHost: 'example.com', thumbnailDataUrl: 'data:image/png;base64,AA=='
@@ -733,6 +786,33 @@ test('popup rejects a stale background before offering history actions', async (
     await page.evaluate(`document.querySelector('#historyButton').click()`);
     await page.waitUntil(`document.querySelector('#status').textContent.includes('updated')`, 'Stale background was not rejected');
     assert.equal(await page.evaluate(`document.querySelectorAll('.history-card').length`), 0, 'Legacy history actions should not be offered to a new popup');
+  });
+});
+
+test('history load failures use the selected UI language instead of background internals', async () => {
+  await withChromePage({
+    url: popupUrl,
+    viewport: { width: 360, height: 600 },
+    initScript: `
+      globalThis.__syncStore = { uiLanguage: 'zh-CN' };
+      Object.defineProperty(globalThis, 'matchMedia', { configurable: true, value: () => ({ matches: false, addEventListener() {}, removeEventListener() {} }) });
+      Object.defineProperty(chrome, 'i18n', { configurable: true, value: { getUILanguage: () => 'en-US' } });
+      Object.defineProperty(chrome, 'runtime', { configurable: true, value: {
+        async sendMessage(message) {
+          if (message.type === 'DOMSHOT_BACKGROUND_PING') return { protocol: 4 };
+          if (message.type === 'DOMSHOT_HISTORY_LIST') return { ok: false, error: 'Could not open capture history' };
+        }
+      } });
+      Object.defineProperty(chrome, 'storage', { configurable: true, value: { sync: {
+        async get(key) { return typeof key === 'string' ? { [key]: globalThis.__syncStore[key] } : { ...globalThis.__syncStore }; },
+        async set(values) { Object.assign(globalThis.__syncStore, values); }
+      } } });
+    `,
+  }, async (page) => {
+    await page.waitUntil(`document.documentElement.lang === 'zh-CN'`, 'selected locale did not initialize');
+    await page.evaluate(`document.querySelector('#historyButton').click()`);
+    await page.waitUntil(`document.querySelector('#status').textContent.includes('无法加载最近截图')`, 'localized history failure was not shown');
+    assert.doesNotMatch(await page.evaluate(`document.querySelector('#status').textContent`), /Could not open capture history/);
   });
 });
 

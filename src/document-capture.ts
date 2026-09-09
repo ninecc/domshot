@@ -6,22 +6,29 @@ const backgrounds = ['background-color', 'background-image', 'background-size', 
 export function documentCapturePlugin(doc: Document, geometry: NonNullable<ReturnType<typeof captureGeometry>>): SnapdomPlugin {
   const root = doc.documentElement;
   const win = doc.defaultView!;
-  const rootStyle = win.getComputedStyle(root);
-  const propagateBody = rootStyle.backgroundImage === 'none' && rootStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && rootStyle.contain === 'none' && doc.body && win.getComputedStyle(doc.body).contain === 'none';
-  const source = propagateBody ? doc.body : root;
-  const viewportRoots = rootStyle.overflowX === 'visible' && rootStyle.overflowY === 'visible' && rootStyle.contain === 'none' && doc.body
-    ? [root, doc.body] : [root];
-  const style = win.getComputedStyle(source);
+  let source: HTMLElement = root;
+  let viewportRoots: HTMLElement[] = [root];
   const background = doc.createElement('div');
-  // Keep the original positioning box. Transparent borders extend only the
-  // painting area, so percentage/gradient/image sizing retains viewport layout.
-  const width = root.getBoundingClientRect().width;
-  const height = root.getBoundingClientRect().height;
-  background.style.cssText = `all:initial;position:absolute;left:0;top:0;z-index:-1;pointer-events:none;box-sizing:content-box;width:${width}px;height:${height}px;border-right:${Math.max(0, geometry.width-width)}px solid transparent;border-bottom:${Math.max(0,geometry.height-height)}px solid transparent;background-origin:content-box;background-clip:border-box;`;
-  for (const property of backgrounds) background.style.setProperty(property, style.getPropertyValue(property));
+  const snapshotDocument = () => {
+    const rootStyle = win.getComputedStyle(root);
+    const propagateBody = rootStyle.backgroundImage === 'none' && rootStyle.backgroundColor === 'rgba(0, 0, 0, 0)' && rootStyle.contain === 'none' && doc.body && win.getComputedStyle(doc.body).contain === 'none';
+    source = propagateBody ? doc.body! : root;
+    viewportRoots = rootStyle.overflowX === 'visible' && rootStyle.overflowY === 'visible' && rootStyle.contain === 'none' && doc.body
+      ? [root, doc.body] : [root];
+    const style = win.getComputedStyle(source);
+    // Keep the original positioning box. Transparent borders extend only the
+    // painting area, so percentage/gradient/image sizing retains viewport layout.
+    const width = root.getBoundingClientRect().width;
+    const height = root.getBoundingClientRect().height;
+    background.style.cssText = `all:initial;position:absolute;left:0;top:0;z-index:-1;pointer-events:none;box-sizing:content-box;width:${width}px;height:${height}px;border-right:${Math.max(0, geometry.width-width)}px solid transparent;border-bottom:${Math.max(0,geometry.height-height)}px solid transparent;background-origin:content-box;background-clip:border-box;`;
+    for (const property of backgrounds) background.style.setProperty(property, style.getPropertyValue(property));
+  };
   return {
     name: 'domshot-document',
-    beforeClone({ options }) { if (options) options.__domshotDocumentRoots = viewportRoots; },
+    beforeClone({ options }) {
+      snapshotDocument();
+      if (options) options.__domshotDocumentRoots = viewportRoots;
+    },
     beforeRender({ nodeMap }) {
       for (const [copy, original] of nodeMap ?? []) {
         if (!(copy instanceof HTMLElement)) continue;

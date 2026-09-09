@@ -53,13 +53,15 @@ export interface CaptureSettings {
   compress: boolean;
 }
 
-export const CONTENT_SCRIPT_PROTOCOL = 14;
-export const BACKGROUND_PROTOCOL = 3;
+export const CONTENT_SCRIPT_PROTOCOL = 15;
+export const BACKGROUND_PROTOCOL = 4;
 
 export interface ResolvedImageResource {
   url: string;
   dataUrl?: string;
-  reason?: 'permission' | 'fetch' | 'invalid';
+  reason?: 'permission' | 'fetch' | 'invalid' | 'timeout' | 'too-large' | 'unsupported' | 'limit';
+  /** The actual URL whose origin needs access, which may differ after a redirect. */
+  permissionUrl?: string;
 }
 
 export type ExtensionMessage =
@@ -76,12 +78,13 @@ export type ExtensionMessage =
   | { type: 'DOMSHOT_COMPLETE_IMAGE_PERMISSION'; token: string }
   | { type: 'DOMSHOT_CANCEL_IMAGE_PERMISSION'; token: string }
   | { type: 'DOMSHOT_RETRY_CAPTURE'; token: string }
-  | { type: 'DOMSHOT_HISTORY_BEGIN'; capture: CaptureHistoryItem; mimeType: string; totalChunks: number }
-  | { type: 'DOMSHOT_HISTORY_CHUNK'; id: string; index: number; data: string }
-  | { type: 'DOMSHOT_HISTORY_COMMIT'; id: string }
-  | { type: 'DOMSHOT_HISTORY_CANCEL'; id: string }
+  | { type: 'DOMSHOT_HISTORY_BEGIN'; capture: CaptureHistoryItem; mimeType: string; digest: string; totalChunks: number }
+  | { type: 'DOMSHOT_HISTORY_CHUNK'; id: string; uploadToken: string; index: number; data: string }
+  | { type: 'DOMSHOT_HISTORY_COMMIT'; id: string; uploadToken: string }
+  | { type: 'DOMSHOT_HISTORY_CANCEL'; id: string; uploadToken: string }
   | { type: 'DOMSHOT_HISTORY_LIST' }
   | { type: 'DOMSHOT_HISTORY_GET'; id: string }
+  | { type: 'DOMSHOT_HISTORY_CONFIRM'; capture: CaptureHistoryItem; mimeType: string; digest: string }
   | { type: 'DOMSHOT_HISTORY_READ'; id: string; offset: number; length: number }
   | { type: 'DOMSHOT_HISTORY_DELETE'; id: string }
   | { type: 'DOMSHOT_HISTORY_RESTORE'; id: string }
@@ -98,15 +101,16 @@ export interface ExtensionResponseMap {
   DOMSHOT_PREPARE_IMAGE_PERMISSION: { prepared: boolean; frameUrl?: string };
   DOMSHOT_OPEN_IMAGE_PERMISSION: { opened: boolean };
   DOMSHOT_GET_IMAGE_PERMISSION: { ok: boolean; origins?: string[]; patterns?: string[] };
-  DOMSHOT_COMPLETE_IMAGE_PERMISSION: { ok: boolean; retried: boolean };
+  DOMSHOT_COMPLETE_IMAGE_PERMISSION: { ok: boolean; retried: boolean; retryPending?: boolean; reason?: 'busy' | 'expired' | 'disconnected' };
   DOMSHOT_CANCEL_IMAGE_PERMISSION: { ok: boolean };
-  DOMSHOT_RETRY_CAPTURE: { started: boolean };
-  DOMSHOT_HISTORY_BEGIN: { ok: boolean };
+  DOMSHOT_RETRY_CAPTURE: { started: boolean; reason?: 'busy' | 'expired' | 'disconnected' };
+  DOMSHOT_HISTORY_BEGIN: { ok: boolean; alreadyStored?: boolean; uploadToken?: string };
   DOMSHOT_HISTORY_CHUNK: { ok: boolean };
   DOMSHOT_HISTORY_COMMIT: { ok: boolean };
   DOMSHOT_HISTORY_CANCEL: { ok: boolean };
   DOMSHOT_HISTORY_LIST: { captures: CaptureHistoryItem[] };
   DOMSHOT_HISTORY_GET: { capture: CaptureHistoryTransfer | null };
+  DOMSHOT_HISTORY_CONFIRM: { state: 'stored' | 'missing' | 'conflict' };
   DOMSHOT_HISTORY_READ: { data: string };
   DOMSHOT_HISTORY_DELETE: { ok: boolean };
   DOMSHOT_HISTORY_RESTORE: { ok: boolean };

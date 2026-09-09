@@ -1,6 +1,6 @@
 {
   "name": "domshot",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "DOMShot browser extension — capture DOM elements as images, powered by SnapDOM.",
   "private": true,
   "license": "MIT",
@@ -15,7 +15,7 @@
     "dev": "node scripts/build.mjs --watch"
   },
   "dependencies": {
-    "@zumer/snapdom": "2.24.10"
+    "@zumer/snapdom": "2.24.17"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.4",
