@@ -8,11 +8,12 @@ import { snapshotStylesPlugin } from './snapshot-styles';
 
 export function renderCapture(request: CaptureRequest, settings: CaptureSettings, plugins: SnapdomPlugin[]) {
   const geometry = captureGeometry(request);
+  const documentPlugin = geometry && request.kind !== 'element' ? [documentCapturePlugin(request.document, geometry)] : [];
   return snapdom(captureTarget(request), {
     scale: settings.scale, dpr: 1, embedFonts: settings.embedFonts,
     reconcile: settings.reconcile, outerShadows: settings.outerShadows,
     compress: settings.compress, clip: geometry?.clip ?? null,
     backgroundColor: settings.format === 'png' ? undefined : '#ffffff',
-    plugins: [snapshotStylesPlugin(), ...(geometry && request.kind !== 'element' ? [documentCapturePlugin(request.document, geometry)] : []), ...plugins],
+    plugins: [snapshotStylesPlugin(), ...plugins, ...documentPlugin],
   });
 }

@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "changed",
+  "scope": "engine",
+  "summary": "Upgrade SnapDOM to 2.24.17 while retaining only the compatibility fixes still required by DOMShot regressions."
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "./schema.json",
+  "type": "fixed",
+  "scope": "rendering",
+  "summary": "Capture body-scrolled documents and backgrounds correctly, and preserve the matching face for icon-font pseudo-elements."
+}
